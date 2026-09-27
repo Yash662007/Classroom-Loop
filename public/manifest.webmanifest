@@ -1,0 +1,17 @@
+{
+  "name": "Classroom Loop",
+  "short_name": "Classroom Loop",
+  "description": "From teacher training to classroom practice — implementation & coaching loop.",
+  "start_url": "/teacher",
+  "display": "standalone",
+  "background_color": "#EEF4FB",
+  "theme_color": "#0A1930",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
