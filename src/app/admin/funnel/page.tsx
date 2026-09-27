@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/client-api";
-import { FunnelBars } from "@/components/admin/FunnelBars";
+import { FunnelBars } from "@/components/analytics/FunnelBars";
 
 interface FunnelItem { stage: string; label: string; count: number; ofTeachers: number }
 

@@ -4,11 +4,20 @@ import { verifyPassword } from "@/lib/password";
 import { createSessionToken, sessionCookie } from "@/lib/jwt";
 import { handleRoute, ApiError, parseJsonBody } from "@/lib/api";
 import { loginSchema } from "@/lib/validation";
+import { rateLimit, clientIp } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
   return handleRoute(async () => {
+    // Brute-force guard: 10 attempts / 5 min per client, applied before any
+    // credential check. Failures only increment the window (counter runs on
+    // every attempt, successful or not — cheap and safe for an MVP).
+    const limit = rateLimit(`login:${clientIp(req)}`, 10, 5 * 60_000);
+    if (!limit.ok) {
+      throw new ApiError(429, "Too many sign-in attempts. Please wait a few minutes and try again.", "rate_limited");
+    }
+
     const body = loginSchema.parse(await parseJsonBody(req));
     const db = getDb();
     const user = db

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/client-api";
-import { FunnelBars } from "@/components/admin/FunnelBars";
+import { FunnelBars } from "@/components/analytics/FunnelBars";
 
 interface FunnelItem { stage: string; label: string; count: number; ofTeachers: number }
 interface Metrics {
@@ -73,7 +73,7 @@ export default function AdminOverviewPage() {
         <div className="card">
           <div className="flex items-center justify-between mb-3">
             <h2 className="label mb-0">Training → practice funnel</h2>
-            <Link href="/admin/funnel" className="text-xs text-softblue-600 underline">Full funnel →</Link>
+            <Link href="/admin/funnel" className="text-xs text-primary-600 underline">Full funnel →</Link>
           </div>
           <FunnelBars funnel={funnel} />
         </div>
@@ -81,7 +81,7 @@ export default function AdminOverviewPage() {
         <div className="card">
           <div className="flex items-center justify-between mb-3">
             <h2 className="label mb-0">Teachers needing support</h2>
-            <Link href="/admin/support" className="text-xs text-softblue-600 underline">Details →</Link>
+            <Link href="/admin/support" className="text-xs text-primary-600 underline">Details →</Link>
           </div>
           {intervention.length === 0 ? (
             <p className="text-sm text-navy-900/55">No support signals right now.</p>

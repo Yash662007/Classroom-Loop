@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/client-api";
-import { GenerateTaskButton } from "@/components/teacher/GenerateTaskButton";
+import { GenerateTaskButton } from "@/components/implementation/GenerateTaskButton";
 
 interface CompetencyView {
   id: string;
@@ -133,7 +133,7 @@ export default function CompetenciesPage() {
                   <p className="text-sm font-medium mb-2">{cr.label}</p>
                   <div className="flex flex-wrap gap-2">
                     {LEVELS.map((lv) => (
-                      <label key={lv.value} className={`cursor-pointer rounded-lg border px-3 py-1.5 text-sm transition-colors ${answers[cr.label] === lv.value ? "bg-navy-900 text-white border-navy-900" : "border-navy-900/15 hover:bg-softblue-100"}`}>
+                      <label key={lv.value} className={`cursor-pointer rounded-lg border px-3 py-1.5 text-sm transition-colors ${answers[cr.label] === lv.value ? "bg-primary-600 text-white border-primary-600" : "border-slate-300 hover:bg-softblue-50"}`}>
                         <input
                           type="radio"
                           name={`${c.id}--${cr.label}`}

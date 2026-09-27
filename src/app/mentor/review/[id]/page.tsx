@@ -4,6 +4,10 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/client-api";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { CardSkeleton } from "@/components/ui/Skeleton";
+import { ErrorState } from "@/components/ui/States";
+import { AIInsightCard } from "@/components/ai/AIInsightCard";
 
 interface ReviewData {
   evidence: {
@@ -91,8 +95,8 @@ export default function ReviewPage() {
     }
   }
 
-  if (error && !data) return <div role="alert" className="card text-red-700 bg-red-50 border-red-200">{error}</div>;
-  if (!data) return <div className="card animate-pulse text-sm text-navy-900/50">Loading submission…</div>;
+  if (error && !data) return <ErrorState message={error} onRetry={load} />;
+  if (!data) return <CardSkeleton label="Loading submission…" />;
 
   const photoSrc = data.evidence.photoPath
     ? `/api/mentor/uploads/${data.evidence.photoPath.split(/[\\/]/).map(encodeURIComponent).join("/")}`
@@ -100,16 +104,13 @@ export default function ReviewPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-navy-900">Evidence review</h1>
-          <p className="text-sm text-navy-900/60">
-            {data.teacher.name} · Attempt {data.evidence.attemptNumber} · {data.competency.title} ·
-            submitted {new Date(data.evidence.submittedAt).toLocaleString()}
-          </p>
-        </div>
-        <Link href={`/mentor/teachers/${data.teacher.id}`} className="btn-secondary">Teacher history →</Link>
-      </div>
+      <PageHeader
+        title="Evidence review"
+        subtitle={<>
+          {data.teacher.name} · Attempt {data.evidence.attemptNumber} · {data.competency.title} · submitted {new Date(data.evidence.submittedAt).toLocaleString()}
+        </>}
+        actions={<Link href={`/mentor/teachers/${data.teacher.id}`} className="btn-secondary">Teacher history</Link>}
+      />
 
       {sent && (
         <div className="rounded-lg bg-teal-50 border border-teal-200 text-teal-600 text-sm px-3 py-2.5">
@@ -154,39 +155,9 @@ export default function ReviewPage() {
 
         <div className="space-y-4">
           {data.analysis ? (
-            <>
-              <div className="card">
-                <h3 className="text-xs font-bold text-navy-900/60 uppercase mb-2">Observed (from evidence)</h3>
-                <ul className="text-sm space-y-1 list-disc pl-4 text-navy-900/80">
-                  {data.analysis.observed.slice(0, 8).map((o, i) => <li key={i}>{o}</li>)}
-                </ul>
-              </div>
-              <div className="card">
-                <h3 className="text-xs font-bold text-navy-900/60 uppercase mb-2">AI interpretation (not fact)</h3>
-                <ul className="text-sm space-y-1 list-disc pl-4 text-navy-900/80">
-                  {data.analysis.interpretation.map((o, i) => <li key={i}>{o}</li>)}
-                </ul>
-                <h3 className="text-xs font-bold text-teal-600 uppercase mb-2 mt-3">AI recommended next actions</h3>
-                <ul className="text-sm space-y-1 list-disc pl-4 text-navy-900/80">
-                  {data.analysis.recommendation.map((o, i) => <li key={i}>{o}</li>)}
-                </ul>
-              </div>
-              {data.analysis.supportFlags.length > 0 && (
-                <div className="card border-amber-200 bg-amber-50/50">
-                  <h3 className="text-xs font-bold text-amber-700 uppercase mb-2">Support signals</h3>
-                  <ul className="text-sm space-y-1.5">
-                    {data.analysis.supportFlags.map((f, i) => (
-                      <li key={i}>
-                        <span className={`badge ${f.severity === "alert" ? "badge-red" : f.severity === "watch" ? "badge-amber" : "badge-neutral"}`}>{f.severity}</span>{" "}
-                        <span className="font-medium">{f.signal}</span> — {f.detail}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </>
+            <AIInsightCard analysis={data.analysis} variant="mentor" />
           ) : (
-            <div className="card text-sm text-navy-900/60">AI analysis is not ready yet — refresh in a moment.</div>
+            <div className="card text-sm text-slate-500">AI analysis is not ready yet — refresh in a moment.</div>
           )}
         </div>
       </div>

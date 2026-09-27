@@ -205,6 +205,7 @@ export function createSchema(db: BetterSqlite3.Database): void {
     CREATE INDEX IF NOT EXISTS idx_tasks_competency ON implementation_tasks(competency_id);
     CREATE INDEX IF NOT EXISTS idx_evidence_task ON evidence_submissions(task_id);
     CREATE INDEX IF NOT EXISTS idx_evidence_user ON evidence_submissions(user_id, submitted_at);
+    CREATE INDEX IF NOT EXISTS idx_tasks_user_competency ON implementation_tasks(user_id, competency_id);
     CREATE INDEX IF NOT EXISTS idx_feedback_evidence ON mentor_feedback(evidence_id);
     CREATE INDEX IF NOT EXISTS idx_adoption_user ON adoption_events(user_id, competency_id);
     CREATE INDEX IF NOT EXISTS idx_results_user ON competency_results(user_id, competency_id);

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/client-api";
+import { STAGE_LABEL } from "@/lib/labels";
 
 interface InterventionTeacher {
   id: string;
@@ -12,11 +13,6 @@ interface InterventionTeacher {
   attempts: number;
   evidencePending: number;
 }
-
-const STAGE_LABEL: Record<string, string> = {
-  not_started: "Not started", practised: "Practised", attempted: "Attempted", evidence_submitted: "Evidence submitted",
-  feedback_received: "Feedback received", retried: "Retried", repeated: "Repeated", sustained: "Sustained",
-};
 
 export default function SupportPage() {
   const [teachers, setTeachers] = useState<InterventionTeacher[] | null>(null);

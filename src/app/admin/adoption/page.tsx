@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/client-api";
+import { STAGE_LABEL } from "@/lib/labels";
 
 interface Adoption {
   byStage: Array<{ stage: string; teachers: number }>;
@@ -9,10 +10,6 @@ interface Adoption {
   sustainedTeachers: number;
 }
 
-const STAGE_LABEL: Record<string, string> = {
-  not_started: "Not started", practised: "Practised", attempted: "Attempted", evidence_submitted: "Evidence submitted",
-  feedback_received: "Feedback received", retried: "Retried", repeated: "Repeated", sustained: "Sustained",
-};
 const STAGE_ORDER = Object.keys(STAGE_LABEL);
 
 export default function AdoptionPage() {

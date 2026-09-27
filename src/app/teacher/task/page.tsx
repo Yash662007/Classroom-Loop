@@ -6,6 +6,8 @@ import { apiFetch, idempotencyKey, clearIdempotencyKey, NetworkError } from "@/l
 import { saveDraft, getDraft, getAllDrafts, clearDraft, enqueueEvidence } from "@/lib/offline/db";
 import type { EvidenceDraft } from "@/lib/offline/db";
 import { useSync } from "@/components/SyncProvider";
+import { CardSkeleton } from "@/components/ui/Skeleton";
+import { ErrorState } from "@/components/ui/States";
 
 interface TaskView {
   id: string;
@@ -309,9 +311,9 @@ export default function TaskPage() {
     start: () => void;
   }
 
-  if (loading) return <div className="card animate-pulse text-sm text-navy-900/50">Loading your task…</div>;
+  if (loading) return <CardSkeleton label="Loading your task…" />;
 
-  if (error) return <div role="alert" className="card text-red-700 bg-red-50 border-red-200">{error}</div>;
+  if (error) return <ErrorState message={error} />;
 
   if (!task) {
     return (
@@ -369,7 +371,7 @@ export default function TaskPage() {
         ) : (
           <div className="space-y-3">
             {choices.map((c, i) => (
-              <label key={i} className={`block cursor-pointer rounded-lg border p-3 text-sm transition-colors ${choice === i ? "bg-softblue-100 border-softblue-500" : "border-navy-900/15 hover:bg-softblue-50"}`}>
+              <label key={i} className={`block cursor-pointer rounded-lg border p-3 text-sm transition-colors ${choice === i ? "bg-softblue-100 border-primary-600" : "border-slate-300 hover:bg-softblue-50"}`}>
                 <input type="radio" name="choice" className="sr-only" checked={choice === i} onChange={() => setChoice(i)} />
                 <span className="font-semibold mr-2">{String.fromCharCode(65 + i)}.</span>
                 {c}
@@ -443,7 +445,7 @@ export default function TaskPage() {
                       type="checkbox"
                       checked={checked}
                       onChange={(e) => setChecklist((c) => ({ ...c, [label]: e.target.checked }))}
-                      className="h-4 w-4 accent-[#237567]"
+                      className="h-4 w-4 accent-[#0F766E]"
                     />
                     {label}
                   </label>

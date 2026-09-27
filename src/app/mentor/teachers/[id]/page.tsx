@@ -4,6 +4,10 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { apiFetch } from "@/lib/client-api";
+import { STAGE_LABEL } from "@/lib/labels";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { CardSkeleton } from "@/components/ui/Skeleton";
+import { ErrorState } from "@/components/ui/States";
 
 interface HistoryAttempt {
   attemptNumber: number;
@@ -32,11 +36,6 @@ interface TeacherData {
   history: HistoryEntry[];
 }
 
-const STAGE_LABEL: Record<string, string> = {
-  not_started: "Not started", practised: "Practised", attempted: "Attempted", evidence_submitted: "Evidence submitted",
-  feedback_received: "Feedback received", retried: "Retried", repeated: "Repeated", sustained: "Sustained",
-};
-
 export default function MentorTeacherHistoryPage() {
   const params = useParams<{ id: string }>();
   const [data, setData] = useState<TeacherData | null>(null);
@@ -55,18 +54,16 @@ export default function MentorTeacherHistoryPage() {
       .catch((err) => setError((err as Error).message));
   }, [params.id]);
 
-  if (error) return <div role="alert" className="card text-red-700 bg-red-50 border-red-200">{error}</div>;
-  if (!data) return <div className="card animate-pulse text-sm text-navy-900/50">Loading history…</div>;
+  if (error) return <ErrorState message={error} />;
+  if (!data) return <CardSkeleton label="Loading history…" />;
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-navy-900">{data.teacher.name}</h1>
-          <p className="text-sm text-navy-900/60">Implementation history — read-only view for mentors.</p>
-        </div>
-        <Link href="/mentor/teachers" className="btn-secondary">← All teachers</Link>
-      </div>
+      <PageHeader
+        title={data.teacher.name}
+        subtitle="Implementation history — read-only view for mentors."
+        actions={<Link href="/mentor/teachers" className="btn-secondary">← All teachers</Link>}
+      />
 
       {queue.length > 0 && (
         <div className="card border-amber-200 bg-amber-50/50">
@@ -108,7 +105,7 @@ export default function MentorTeacherHistoryPage() {
                   {a.evidence.map((e) => (
                     <li key={e.id} className="flex flex-wrap items-center gap-2">
                       <span>✓ Evidence ({new Date(e.submittedAt).toLocaleDateString()})</span>
-                      <Link href={`/mentor/review/${e.id}`} className="text-softblue-600 underline text-xs">Open review</Link>
+                      <Link href={`/mentor/review/${e.id}`} className="text-primary-600 underline text-xs">Open review</Link>
                       {e.feedback && <span className={e.feedback.status === "sent" ? "badge-teal" : "badge-amber"}>Feedback {e.feedback.status}</span>}
                     </li>
                   ))}

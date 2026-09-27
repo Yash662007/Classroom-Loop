@@ -3,6 +3,10 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/client-api";
+import { STAGE_LABEL } from "@/lib/labels";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { CardSkeleton } from "@/components/ui/Skeleton";
+import { ErrorState } from "@/components/ui/States";
 
 interface TeacherRow {
   id: string;
@@ -17,11 +21,6 @@ interface TeacherRow {
   supportFlags: Array<{ signal: string; detail: string; severity: string }>;
 }
 
-const STAGE_LABEL: Record<string, string> = {
-  not_started: "Not started", practised: "Practised", attempted: "Attempted", evidence_submitted: "Evidence submitted",
-  feedback_received: "Feedback received", retried: "Retried", repeated: "Repeated", sustained: "Sustained",
-};
-
 export default function MentorTeachersPage() {
   const [teachers, setTeachers] = useState<TeacherRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -32,15 +31,15 @@ export default function MentorTeachersPage() {
       .catch((err) => setError((err as Error).message));
   }, []);
 
-  if (error) return <div role="alert" className="card text-red-700 bg-red-50 border-red-200">{error}</div>;
-  if (!teachers) return <div className="card animate-pulse text-sm text-navy-900/50">Loading teachers…</div>;
+  if (error) return <ErrorState message={error} />;
+  if (!teachers) return <CardSkeleton label="Loading teachers…" />;
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-navy-900">Assigned teachers</h1>
-        <p className="text-sm text-navy-900/60">Ordered by support need — signals, not scores.</p>
-      </div>
+      <PageHeader
+        title="Teachers"
+        subtitle="Ordered by support need — signals, not scores."
+      />
 
       <div className="grid md:grid-cols-2 gap-4">
         {teachers.map((t) => (
@@ -70,7 +69,7 @@ export default function MentorTeachersPage() {
                 ))}
               </ul>
             )}
-            <Link href={`/mentor/teachers/${t.id}`} className="text-sm text-softblue-600 underline">Open implementation history →</Link>
+            <Link href={`/mentor/teachers/${t.id}`} className="text-sm text-primary-600 underline">Open implementation history →</Link>
           </div>
         ))}
       </div>

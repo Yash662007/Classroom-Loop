@@ -112,7 +112,7 @@ export default function ContextPage() {
                   key={g}
                   type="button"
                   onClick={() => update("grades_taught", on ? ctx.grades_taught.filter((x) => x !== g) : [...ctx.grades_taught, g].sort((a, b) => a - b))}
-                  className={`h-8 w-8 rounded-lg text-sm font-semibold border transition-colors ${on ? "bg-navy-900 text-white border-navy-900" : "border-navy-900/15 hover:bg-softblue-100"}`}
+                  className={`h-8 w-8 rounded-lg text-sm font-semibold border transition-colors ${on ? "bg-primary-600 text-white border-primary-600" : "border-slate-300 hover:bg-softblue-50"}`}
                   aria-pressed={on}
                 >
                   {g}
@@ -130,7 +130,7 @@ export default function ContextPage() {
 
         <div>
           <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
-            <input type="checkbox" className="h-4 w-4 accent-[#237567]" checked={ctx.multigrade}
+            <input type="checkbox" className="h-4 w-4 accent-[#0F766E]" checked={ctx.multigrade}
               onChange={(e) => update("multigrade", e.target.checked)} />
             I teach multi-grade classes (several grades in the same room)
           </label>

@@ -376,6 +376,7 @@ export interface SubmitEvidenceInput {
 export interface SubmitEvidenceResult {
   evidenceId: string;
   duplicate: boolean;
+  /** Null when the AI analysis is still pending — the evidence itself is always saved. */
   analysis: {
     id: string;
     observed: string[];
@@ -386,7 +387,7 @@ export interface SubmitEvidenceResult {
     supportRecommended: boolean;
     source: AiSource;
     generatedAt: string;
-  };
+  } | null;
 }
 
 export async function submitEvidence(input: SubmitEvidenceInput): Promise<SubmitEvidenceResult> {
@@ -396,8 +397,11 @@ export async function submitEvidence(input: SubmitEvidenceInput): Promise<Submit
   if (input.clientToken) {
     const dup = db.prepare(`SELECT id FROM evidence_submissions WHERE client_token = ?`).get(input.clientToken) as { id: string } | undefined;
     if (dup) {
-      const analysis = getAnalysisByEvidenceId(dup.id);
-      if (!analysis) throw new ApiError(500, "Evidence exists without analysis — please retry.", "analysis_missing");
+      // Self-heal: if the original submission's analysis failed mid-flight, retry
+      // it once now instead of 500-ing forever (the evidence row survived).
+      let analysis = getAnalysisByEvidenceId(dup.id);
+      if (!analysis) analysis = await regenerateAnalysis(dup.id);
+      if (!analysis) throw new ApiError(503, "Evidence was received; its analysis is still pending. Please retry shortly.", "analysis_pending");
       return { evidenceId: dup.id, duplicate: true, analysis };
     }
   }
@@ -405,6 +409,9 @@ export async function submitEvidence(input: SubmitEvidenceInput): Promise<Submit
   const task = db.prepare(`SELECT * FROM implementation_tasks WHERE id = ? AND user_id = ?`).get(input.taskId, input.userId) as TaskRow | undefined;
   if (!task) throw new ApiError(404, "Task not found", "not_found");
 
+  // Failure recovery (spec §30): the evidence row is persisted FIRST, so if the
+  // AI step throws, the submission survives (status 'submitted') and analysis
+  // can be regenerated later. The AI is never allowed to destroy user data.
   const id = randomUUID();
   db.prepare(
     `INSERT INTO evidence_submissions (id, user_id, task_id, attempt_number, reflection, voice_note, checklist, photo_path, status, client_token, submitted_at)
@@ -433,7 +440,12 @@ export async function submitEvidence(input: SubmitEvidenceInput): Promise<Submit
     context: getContext(input.userId),
     history: getHistorySummary(input.userId, task.competency_id),
   };
-  const ai = await analyzeEvidence(analysisInput);
+  const ai = await analyzeEvidence(analysisInput).catch((err: unknown) => {
+    console.error("[ai] evidence analysis failed; evidence kept for retry:", err instanceof Error ? err.message : err);
+    return null;
+  });
+
+  if (ai) {
 
   const analysisId = randomUUID();
   db.prepare(
@@ -452,8 +464,11 @@ export async function submitEvidence(input: SubmitEvidenceInput): Promise<Submit
     new Date().toISOString()
   );
   db.prepare(`UPDATE evidence_submissions SET status = 'analyzed' WHERE id = ?`).run(id);
+  }
 
-  // Evidence submission completes the classroom-application step of the attempt.
+  // Evidence submission completes the classroom-application step of the attempt
+  // (adoption advances even if analysis is still pending — the classroom attempt
+  // itself is real; the AI insight is a later enhancement).
   db.prepare(
     `UPDATE implementation_tasks SET status = 'completed' WHERE id = ? AND status IN ('assigned','practised','attempted')`
   ).run(input.taskId);
@@ -466,8 +481,61 @@ export async function submitEvidence(input: SubmitEvidenceInput): Promise<Submit
   }
 
   const analysis = getAnalysisByEvidenceId(id);
-  if (!analysis) throw new ApiError(500, "Analysis failed to persist — please retry.", "analysis_missing");
   return { evidenceId: id, duplicate: false, analysis };
+}
+
+/**
+ * Regenerates the AI analysis for an evidence row that was saved but never
+ * analyzed (server failure mid-submission). Idempotent: no-op if analysis
+ * already exists. Returns null when regeneration is not possible.
+ */
+export async function regenerateAnalysis(evidenceId: string) {
+  const db = getDb();
+  const existing = getAnalysisByEvidenceId(evidenceId);
+  if (existing) return existing;
+  const row = db
+    .prepare(
+      `SELECT e.*, t.competency_id, t.attempt_number AS task_attempt FROM evidence_submissions e
+       JOIN implementation_tasks t ON t.id = e.task_id WHERE e.id = ?`
+    )
+    .get(evidenceId) as
+    | (EvidenceRow & { competency_id: string; task_attempt: number })
+    | undefined;
+  if (!row) return null;
+
+  const comp = getCompetency(row.competency_id);
+  const keywords = Object.fromEntries(comp.criteria.map((c) => [c.label, c.keywords]));
+  const ai = await analyzeEvidence({
+    reflection: row.reflection,
+    checklist: JSON.parse(row.checklist) as Record<string, boolean>,
+    voiceNote: row.voice_note,
+    criteria: comp.criteria.map((c) => c.label),
+    keywordsByCriterion: keywords,
+    context: getContext(row.user_id),
+    history: getHistorySummary(row.user_id, row.competency_id),
+  }).catch((err: unknown) => {
+    console.error("[ai] analysis regeneration failed:", err instanceof Error ? err.message : err);
+    return null;
+  });
+  if (!ai) return null;
+
+  db.prepare(
+    `INSERT INTO ai_analyses (id, evidence_id, observed, interpretation, recommendation, criterion_hits, support_flags, support_recommended, generated_by, generated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    randomUUID(),
+    evidenceId,
+    JSON.stringify(ai.result.observed),
+    JSON.stringify(ai.result.interpretation),
+    JSON.stringify(ai.result.recommendation),
+    JSON.stringify(ai.result.criterionHits),
+    JSON.stringify(ai.result.supportFlags),
+    ai.result.supportRecommended ? 1 : 0,
+    ai.source,
+    new Date().toISOString()
+  );
+  db.prepare(`UPDATE evidence_submissions SET status = 'analyzed' WHERE id = ?`).run(evidenceId);
+  return getAnalysisByEvidenceId(evidenceId);
 }
 
 export function getAnalysisByEvidenceId(evidenceId: string) {
@@ -621,6 +689,37 @@ export function getTeacherDashboard(userId: string) {
     steps,
     counts: { evidence: evidenceCount.n, feedbackSent: feedbackSent.n, attempts: tasks.length },
   };
+}
+
+export interface SentFeedbackView {
+  evidenceId: string;
+  attemptNumber: number;
+  message: string;
+  sentAt: string;
+  editedByMentor: boolean;
+}
+
+/** Latest sent mentor feedback for a competency (teacher-facing dashboard). */
+export function listSentFeedback(userId: string, competencyId: string, limit = 3): SentFeedbackView[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT e.id AS evidence_id, t.attempt_number, f.sent_message, f.sent_at, f.edited_by_mentor
+       FROM mentor_feedback f
+       JOIN evidence_submissions e ON e.id = f.evidence_id
+       JOIN implementation_tasks t ON t.id = e.task_id
+       WHERE t.user_id = ? AND t.competency_id = ? AND f.status = 'sent'
+       ORDER BY f.sent_at DESC LIMIT ?`
+    )
+    .all(userId, competencyId, limit) as Array<{
+      evidence_id: string; attempt_number: number; sent_message: string; sent_at: string; edited_by_mentor: number;
+    }>;
+  return rows.map((r) => ({
+    evidenceId: r.evidence_id,
+    attemptNumber: r.attempt_number,
+    message: r.sent_message,
+    sentAt: r.sent_at,
+    editedByMentor: Number(r.edited_by_mentor) === 1,
+  }));
 }
 
 export function getImplementationHistory(userId: string) {

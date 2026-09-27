@@ -3,6 +3,9 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/client-api";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { CardSkeleton } from "@/components/ui/Skeleton";
+import { EmptyState, ErrorState } from "@/components/ui/States";
 
 interface QueueItem {
   evidenceId: string;
@@ -26,23 +29,21 @@ export default function ReviewQueuePage() {
       .catch((err) => setError((err as Error).message));
   }, []);
 
-  if (error) return <div role="alert" className="card text-red-700 bg-red-50 border-red-200">{error}</div>;
-  if (!queue) return <div className="card animate-pulse text-sm text-navy-900/50">Loading queue…</div>;
+  if (error) return <ErrorState message={error} />;
+  if (!queue) return <CardSkeleton label="Loading queue…" />;
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-navy-900">Review queue</h1>
-        <p className="text-sm text-navy-900/60">
-          Classroom evidence awaiting your review — support-need first. AI analysis is ready for each item; your review is the human decision.
-        </p>
-      </div>
+      <PageHeader
+        title="Evidence review"
+        subtitle="Classroom evidence awaiting your review — support-need first. AI analysis is ready for each item; your review is the human decision."
+      />
 
       {queue.length === 0 && (
-        <div className="card text-center py-10">
-          <p className="text-sm text-navy-900/60">Queue is clear — every submission has been reviewed. 🎉</p>
-          <p className="text-xs text-navy-900/40 mt-1">New submissions from your teachers will appear here.</p>
-        </div>
+        <EmptyState
+          title="Queue is clear"
+          body="Every submission has been reviewed. New evidence from your teachers appears here as it arrives."
+        />
       )}
 
       <ul className="space-y-3">
@@ -55,8 +56,7 @@ export default function ReviewQueuePage() {
                   <span className="badge-neutral">Attempt {q.attemptNumber}</span>
                   <span className="badge-neutral">{q.competencyTitle}</span>
                   {q.topSupportSignal && <span className="badge-amber">{q.topSupportSignal}</span>}
-                  {q.hasFeedbackDraft && <span className="badge-neutral">AI draft ready</span>}
-                </div>
+                  {q.hasFeedbackDraft && <span className="badge-neutral">AI draft ready</span>}                </div>
                 <p className="text-xs text-navy-900/50 mb-2">
                   Submitted {new Date(q.submittedAt).toLocaleString()}
                 </p>
