@@ -27,6 +27,10 @@ export const competencyCheckSchema = z.object({
   answers: z.record(z.string(), z.number().int().min(0).max(2)),
 });
 
+export const completeModuleSchema = z.object({
+  module_id: z.string().min(1),
+});
+
 /* ---------------- Implementation ---------------- */
 
 export const generateTaskSchema = z.object({

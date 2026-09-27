@@ -16,6 +16,7 @@ import {
   ApiError,
 } from "@/lib/api";
 import {
+  completeModule,
   generateTask,
   listCompetenciesWithStatus,
   submitCompetencyCheck,
@@ -263,6 +264,42 @@ describe("submitCompetencyCheck threshold", () => {
   it("rejects a competency with no check items", () => {
     createCompetency("comp-empty", []);
     expect(() => submitCompetencyCheck(TEACHER, "comp-empty", {})).toThrowError(ApiError);
+  });
+});
+
+/* ---------------- Training module completion ---------------- */
+
+describe("completeModule + training gate", () => {
+  const TEACHER = "t-train";
+
+  beforeEach(() => {
+    createUser(TEACHER, "teacher");
+    const db = getDb();
+    db.prepare(`INSERT INTO competencies (id, title, description, created_at) VALUES ('comp-train', 'T', 'd', ?)`).run(new Date().toISOString());
+    db.prepare(`INSERT INTO training_modules (id, competency_id, title, description, display_order) VALUES ('mod-1', 'comp-train', 'M1', 'd', 0)`).run();
+    db.prepare(`INSERT INTO training_modules (id, competency_id, title, description, display_order) VALUES ('mod-2', 'comp-train', 'M2', 'd', 1)`).run();
+  });
+
+  it("marks a module complete and reports progress toward the gate", () => {
+    expect(completeModule(TEACHER, "mod-1")).toEqual({ completed: 1, total: 2, trainingComplete: false });
+    expect(completeModule(TEACHER, "mod-2")).toEqual({ completed: 2, total: 2, trainingComplete: true });
+  });
+
+  it("is idempotent — repeating a module does not double-count", () => {
+    completeModule(TEACHER, "mod-1");
+    completeModule(TEACHER, "mod-1");
+    expect(completeModule(TEACHER, "mod-1")).toEqual({ completed: 1, total: 2, trainingComplete: false });
+  });
+
+  it("unlocks the competency check only when every module is complete", () => {
+    completeModule(TEACHER, "mod-1");
+    expect(listCompetenciesWithStatus(TEACHER).find((c) => c.id === "comp-train")?.trainingComplete).toBe(false);
+    completeModule(TEACHER, "mod-2");
+    expect(listCompetenciesWithStatus(TEACHER).find((c) => c.id === "comp-train")?.trainingComplete).toBe(true);
+  });
+
+  it("rejects unknown module ids", () => {
+    expect(() => completeModule(TEACHER, "nope")).toThrowError(ApiError);
   });
 });
 

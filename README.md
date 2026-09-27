@@ -46,9 +46,10 @@ npm test          # vitest unit suite (engine, domain logic, API contracts)
 npm run typecheck # tsc --noEmit
 ```
 
-`data/acceptance-journey.mjs` is a 20-step end-to-end script that walks the full
+`scripts/acceptance-journey.mjs` is a 20-step end-to-end script that walks the full
 loop (teacher → evidence → mentor → feedback → retry → analytics) against a
-running server on a fresh seed: `node data/acceptance-journey.mjs`.
+running server on a fresh seed: `node scripts/acceptance-journey.mjs`. CI runs
+it automatically on every push (`.github/workflows/ci.yml`).
 
 ## Optional: LLM upgrade
 

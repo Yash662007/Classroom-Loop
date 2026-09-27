@@ -23,6 +23,7 @@ All routes are under `/api`, JSON in/out unless noted, and authenticated by the
 | GET | `/teacher/competencies` | teacher | Competencies + modules + latest check result. |
 | GET/PUT | `/teacher/context` | teacher | Teaching context upsert (zod-validated). |
 | POST | `/competencies/check` | teacher | `{ competency_id, answers }` → `passed` ≥ 80% / `needs_review`. |
+| POST | `/competencies/complete-module` | teacher | `{ module_id }` → marks one training module done (idempotent); the check unlocks when all modules are complete. |
 | POST | `/implementation/generate` | teacher | `{ competency_id, force_new? }` → personalized task (AI). |
 | GET/POST | `/practice/sessions` | teacher | Scenario response; one session per task (409 on repeat). |
 | POST | `/evidence` | teacher | Multipart (photo) or JSON. Idempotent via `x-idempotency-key` / `client_token`. `analysis` may be `null` while pending. |

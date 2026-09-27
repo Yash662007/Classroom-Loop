@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Seed demo data
+        run: npm run db:seed
+
+      - name: Start production server
+        run: |
+          npm start &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:3000/api/health >/dev/null && break
+            sleep 1
+          done
+          curl -f http://localhost:3000/api/health
+
+      - name: 20-step acceptance journey (full loop E2E)
+        run: node scripts/acceptance-journey.mjs

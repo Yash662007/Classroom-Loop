@@ -164,6 +164,37 @@ export function listCompetenciesWithStatus(userId: string) {
   });
 }
 
+/**
+ * Marks a training module complete for a teacher (idempotent — INSERT OR
+ * IGNORE). The competency check unlocks only when every module is done.
+ */
+export function completeModule(userId: string, moduleId: string): { completed: number; total: number; trainingComplete: boolean } {
+  const db = getDb();
+  const module = db
+    .prepare(
+      `SELECT m.id,
+              m.competency_id,
+              (SELECT COUNT(*) FROM training_modules WHERE competency_id = m.competency_id) AS total
+       FROM training_modules m WHERE m.id = ?`
+    )
+    .get(moduleId) as { id: string; competency_id: string; total: number } | undefined;
+  if (!module) throw new ApiError(404, "Training module not found", "not_found");
+
+  db.prepare(
+    `INSERT OR IGNORE INTO module_completions (user_id, module_id, completed_at) VALUES (?, ?, ?)`
+  ).run(userId, moduleId, new Date().toISOString());
+
+  const completed = (
+    db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM module_completions
+         WHERE user_id = ? AND module_id IN (SELECT id FROM training_modules WHERE competency_id = ?)`
+      )
+      .get(userId, module.competency_id) as { n: number }
+  ).n;
+  return { completed, total: module.total, trainingComplete: module.total > 0 && completed >= module.total };
+}
+
 export function submitCompetencyCheck(
   userId: string,
   competencyId: string,

@@ -27,6 +27,25 @@ export default function CompetenciesPage() {
   const [checkingId, setCheckingId] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Record<string, number>>({});
   const [busy, setBusy] = useState(false);
+  const [moduleBusy, setModuleBusy] = useState<string | null>(null);
+
+  async function toggleModule(competencyId: string, moduleId: string, completed: boolean) {
+    if (completed) return; // completion is permanent in this MVP
+    setModuleBusy(moduleId);
+    setError(null);
+    try {
+      await apiFetch("/api/competencies/complete-module", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ module_id: moduleId }),
+      });
+      await load();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setModuleBusy(null);
+    }
+  }
 
   const load = useCallback(async () => {
     try {
@@ -98,16 +117,27 @@ export default function CompetenciesPage() {
             <ul className="space-y-1.5">
               {c.modules.map((m) => (
                 <li key={m.id} className="flex items-start gap-2 text-sm">
-                  <span className={`mt-0.5 h-4 w-4 shrink-0 rounded-full flex items-center justify-center text-[10px] font-bold ${m.completed ? "bg-teal-500 text-white" : "bg-softblue-100 text-navy-900/50"}`}>
-                    {m.completed ? "✓" : "•"}
-                  </span>
+                  <input
+                    type="checkbox"
+                    checked={m.completed}
+                    disabled={m.completed || moduleBusy === m.id}
+                    onChange={() => toggleModule(c.id, m.id, m.completed)}
+                    aria-label={`Mark "${m.title}" complete`}
+                    className="mt-0.5 h-4 w-4 shrink-0 accent-[#0F766E]"
+                  />
                   <span>
-                    <span className="font-medium">{m.title}</span>
+                    <span className={`font-medium ${m.completed ? "" : ""}`}>{m.title}</span>
                     <span className="text-navy-900/60"> — {m.description}</span>
+                    {moduleBusy === m.id && <span className="ml-2 text-xs text-slate-400">saving…</span>}
                   </span>
                 </li>
               ))}
             </ul>
+            {!c.trainingComplete && c.modules.length > 0 && (
+              <p className="text-xs text-navy-900/50 mt-2">
+                Complete all modules to unlock the competency check.
+              </p>
+            )}
           </div>
 
           {c.check ? (
@@ -157,11 +187,18 @@ export default function CompetenciesPage() {
                 <p className="text-xs text-navy-900/50">Answer every item to submit.</p>
               )}
             </div>
-          ) : (
+          ) : c.trainingComplete ? (
             <div className="border-t border-navy-900/10 pt-4">
               <button type="button" className="btn-primary" onClick={() => { setCheckingId(c.id); setAnswers({}); }}>
                 Take the competency check
               </button>
+            </div>
+          ) : (
+            <div className="border-t border-navy-900/10 pt-4">
+              <button type="button" className="btn-primary" disabled>
+                Take the competency check
+              </button>
+              <p className="text-xs text-navy-900/50 mt-1.5">Finish all training modules above to unlock the check.</p>
             </div>
           )}
         </div>
