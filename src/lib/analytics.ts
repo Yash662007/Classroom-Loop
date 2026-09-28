@@ -7,6 +7,9 @@
 import { getDb } from "@/db/instance";
 import { ADOPTION_STAGES } from "@/db/schema";
 import type { AdoptionStage } from "@/db/schema";
+import { getLlmUsageSummary, type LlmUsageSummary } from "@/lib/llm-usage";
+
+export type { LlmUsageSummary };
 
 export interface FunnelResponse {
   stage: string;
@@ -79,6 +82,36 @@ export interface ImplementationMetrics {
   avgTimeToFirstAttemptHours: number | null;
   avgFeedbackTurnaroundHours: number | null;
   supportFlaggedAnalyses: number;
+}
+
+export interface StageDropOff {
+  stage: string;
+  label: string;
+  teachers: number;
+  /** Share of the previous stage's cohort that did not reach this stage. */
+  stepDropOffPercent: number | null;
+}
+
+/**
+ * Drop-off analysis (#17): for every funnel stage, how many teachers were
+ * lost from the previous step. First stage has no previous step (null).
+ */
+export function getFunnelDropOff(): StageDropOff[] {
+  const funnel = getTrainingToPracticeFunnel();
+  return funnel.map((f, i) => {
+    const prev = i > 0 ? funnel[i - 1].count : null;
+    return {
+      stage: f.stage,
+      label: f.label,
+      teachers: f.count,
+      stepDropOffPercent: prev !== null && prev > 0 ? Math.round((1 - f.count / prev) * 100) : null,
+    };
+  });
+}
+
+/** LLM spend summary for the admin view (empty when no LLM calls were metered). */
+export function getLlmUsage(): ReturnType<typeof getLlmUsageSummary> {
+  return getLlmUsageSummary();
 }
 
 export function getImplementationMetrics(): ImplementationMetrics {

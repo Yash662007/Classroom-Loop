@@ -79,9 +79,19 @@ single-node stopgap.
 ## Known limitations
 
 - Training-module completion is seeded, not yet editable in the UI.
-- Real speech-to-text on uploaded audio and LLM output verification need an
-  `OPENAI_API_KEY`; the AI analyzes typed/dictated text, not raw audio.
+- Real speech-to-text on uploaded audio needs an `OPENAI_API_KEY`; the AI
+  analyzes typed/dictated text, not raw audio.
+- The LLM branch is contract-tested against an OpenAI-compatible mock
+  (`tests/llm-branch.test.ts`) — routing, strict JSON, token metering and
+  fallback all run green. Output **quality from a real provider** is still
+  unverified until `OPENAI_API_KEY` points at one.
 - Single-node rate limiting and SQLite mean vertical scaling only; the AI layer
   falls back to the local engine when no LLM is configured or reachable.
 - Evidence media is stored on local disk; move to object storage + CDN for
   multi-node production (retention window above is the local-disk stopgap).
+
+## Manual test plans
+
+- [`docs/real-device-test-plan.md`](docs/real-device-test-plan.md) — Android
+  Chrome hardware/radio/permission flows that cannot be verified in a desktop
+  browser, with expected results per step.

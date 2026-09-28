@@ -9,6 +9,7 @@ import { randomUUID } from "node:crypto";
 import { ApiError } from "./api";
 import { getDb } from "@/db/instance";
 import { analyzeEvidence, generatePersonalization, generatePracticeScenario } from "./ai/service";
+import { recordLlmUsage } from "./llm-usage";
 import type {
   TeacherContextData,
   HistorySummary,
@@ -363,6 +364,13 @@ export async function generateTask(
     new Date().toISOString()
   );
 
+  if (personalization.source === "llm") {
+    recordLlmUsage({ artifactKind: "task_generation", artifactId: id, usage: personalization.usage ?? null, model: personalization.model });
+  }
+  if (scenario.source === "llm") {
+    recordLlmUsage({ artifactKind: "task_generation", artifactId: id, usage: scenario.usage ?? null, model: scenario.model });
+  }
+
   const task = db.prepare(`SELECT * FROM implementation_tasks WHERE id = ?`).get(id) as TaskRow;
   recordWorkflowEvent({
     userId,
@@ -565,6 +573,9 @@ export async function submitEvidence(input: SubmitEvidenceInput): Promise<Submit
     new Date().toISOString()
   );
   db.prepare(`UPDATE evidence_submissions SET status = 'analyzed' WHERE id = ?`).run(id);
+  if (ai.source === "llm") {
+    recordLlmUsage({ artifactKind: "evidence_analysis", artifactId: id, usage: ai.usage ?? null, model: ai.model });
+  }
   }
 
   // Evidence submission completes the classroom-application step of the attempt

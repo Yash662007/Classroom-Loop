@@ -21,6 +21,20 @@ export interface ChatResult {
   model: string;
 }
 
+/** Token accounting returned by OpenAI-compatible providers when they report usage. */
+export interface ChatUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens?: number;
+  model?: string;
+}
+
+export interface ChatJsonResult<T> {
+  data: T;
+  usage: ChatUsage | null;
+  model: string;
+}
+
 export class LlmUnavailableError extends Error {
   constructor(message: string, public readonly cause?: unknown) {
     super(message);
@@ -42,6 +56,14 @@ export function isLlmConfigured(): boolean {
 }
 
 export async function chatJson<T>(messages: ChatMessage[], opts: ChatOptions = {}): Promise<T> {
+  return (await chatJsonWithUsage<T>(messages, opts)).data;
+}
+
+/**
+ * chatJson + the provider's usage accounting (when reported). Callers that
+ * meter LLM spend use this variant; plain callers keep the simple signature.
+ */
+export async function chatJsonWithUsage<T>(messages: ChatMessage[], opts: ChatOptions = {}): Promise<ChatJsonResult<T>> {
   if (!isLlmConfigured()) {
     throw new LlmUnavailableError("No LLM provider configured");
   }
@@ -90,20 +112,34 @@ export async function chatJson<T>(messages: ChatMessage[], opts: ChatOptions = {
     raw = await doFetch();
   }
 
+  let usage: ChatUsage | null = null;
+
   try {
-    const parsed = JSON.parse(raw);
+    const parsed = JSON.parse(raw) as {
+      choices?: Array<{ message?: { content?: string } }>;
+      usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
+      model?: string;
+    };
     const content = typeof parsed === "object" && parsed !== null && "choices" in parsed
-      ? (parsed as { choices: Array<{ message?: { content?: string } }> }).choices?.[0]?.message?.content
+      ? parsed.choices?.[0]?.message?.content
       : undefined;
+    if (typeof parsed.usage?.prompt_tokens === "number" || typeof parsed.usage?.completion_tokens === "number") {
+      usage = {
+        promptTokens: parsed.usage.prompt_tokens ?? 0,
+        completionTokens: parsed.usage.completion_tokens ?? 0,
+        totalTokens: parsed.usage.total_tokens,
+        model: parsed.model,
+      };
+    }
     if (typeof content !== "string" || !content.trim()) {
       throw new LlmUnavailableError("LLM returned no message content");
     }
     try {
-      return JSON.parse(content) as T;
+      return { data: JSON.parse(content) as T, usage, model };
     } catch {
       // Tolerate fenced/prose-wrapped JSON.
       const match = content.match(/\{[\s\S]*\}/);
-      if (match) return JSON.parse(match[0]) as T;
+      if (match) return { data: JSON.parse(match[0]) as T, usage, model };
       throw new LlmUnavailableError("LLM returned malformed JSON");
     }
   } catch (err) {

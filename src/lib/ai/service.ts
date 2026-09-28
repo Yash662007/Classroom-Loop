@@ -8,7 +8,7 @@
  * Human-in-the-loop principle: this module never decides anything final;
  * its outputs are always drafts/insights for humans to review.
  */
-import { chatJson, isLlmConfigured, LlmUnavailableError } from "./client";
+import { chatJson, chatJsonWithUsage, isLlmConfigured, LlmUnavailableError, type ChatUsage } from "./client";
 import {
   localAnalyzeEvidence,
   localDraftFeedback,
@@ -31,6 +31,9 @@ export interface WithSource<T> {
   source: AiSource;
   /** Present (with the error) when the LLM was configured but fell back. */
   fallbackReason?: string;
+  /** Token usage when an LLM produced this result and the provider reported it. */
+  usage?: ChatUsage | null;
+  model?: string;
 }
 
 /** Runs an LLM attempt; on any failure returns null so callers can fall back. */
@@ -54,12 +57,15 @@ export async function generatePersonalization(
   input: PersonalizationInput
 ): Promise<WithSource<PersonalizationOutput>> {
   const llm = await tryLlm(() => llmPersonalize(input));
-  if (llm) return { result: llm, source: "llm" };
+  if (llm) {
+    const { __usage, __model, ...result } = llm;
+    return { result, source: "llm", usage: __usage, model: __model };
+  }
   return { result: localPersonalize(input), source: "local_engine" };
 }
 
-async function llmPersonalize(input: PersonalizationInput): Promise<PersonalizationOutput> {
-  const data = await chatJson<Partial<PersonalizationOutput>>([
+async function llmPersonalize(input: PersonalizationInput): Promise<PersonalizationOutput & { __usage?: ChatUsage | null; __model?: string }> {
+  const { data, usage, model } = await chatJsonWithUsage<Partial<PersonalizationOutput>>([
     {
       role: "system",
       content:
@@ -71,6 +77,8 @@ async function llmPersonalize(input: PersonalizationInput): Promise<Personalizat
   ]);
   const base = localPersonalize(input); // shape/length backstop
   return {
+    __usage: usage,
+    __model: model,
     title: typeof data.title === "string" && data.title.trim() ? data.title.trim().slice(0, 120) : base.title,
     activity: typeof data.activity === "string" && data.activity.trim() ? data.activity.trim().slice(0, 2000) : base.activity,
     difficulty: data.difficulty === "starter" || data.difficulty === "stretch" ? data.difficulty : "core",
@@ -87,12 +95,15 @@ export async function generatePracticeScenario(
   input: PracticeScenarioInput
 ): Promise<WithSource<PracticeScenarioOutput>> {
   const llm = await tryLlm(() => llmScenario(input));
-  if (llm) return { result: llm, source: "llm" };
+  if (llm) {
+    const { __usage, __model, ...result } = llm;
+    return { result, source: "llm", usage: __usage, model: __model };
+  }
   return { result: localPracticeScenario(input), source: "local_engine" };
 }
 
-async function llmScenario(input: PracticeScenarioInput): Promise<PracticeScenarioOutput> {
-  const data = await chatJson<Partial<PracticeScenarioOutput>>([
+async function llmScenario(input: PracticeScenarioInput): Promise<PracticeScenarioOutput & { __usage?: ChatUsage | null; __model?: string }> {
+  const { data, usage, model } = await chatJsonWithUsage<Partial<PracticeScenarioOutput>>([
     {
       role: "system",
       content:
@@ -108,6 +119,8 @@ async function llmScenario(input: PracticeScenarioInput): Promise<PracticeScenar
   const choices = data.choices.map((c) => String(c)).slice(0, 4);
   const rec = Number(data.recommendedChoice);
   return {
+    __usage: usage,
+    __model: model,
     scenario: String(data.scenario ?? "").slice(0, 1200),
     choices,
     recommendedChoice: Number.isInteger(rec) && rec >= 0 && rec < choices.length ? rec : 0,
@@ -120,12 +133,15 @@ export async function analyzeEvidence(
   input: AnalyzeEvidenceInput
 ): Promise<WithSource<AnalysisResult>> {
   const llm = await tryLlm(() => llmAnalyze(input));
-  if (llm) return { result: llm, source: "llm" };
+  if (llm) {
+    const { __usage, __model, ...result } = llm;
+    return { result, source: "llm", usage: __usage, model: __model };
+  }
   return { result: localAnalyzeEvidence(input), source: "local_engine" };
 }
 
-async function llmAnalyze(input: AnalyzeEvidenceInput): Promise<AnalysisResult> {
-  const data = await chatJson<Partial<AnalysisResult>>([
+async function llmAnalyze(input: AnalyzeEvidenceInput): Promise<AnalysisResult & { __usage?: ChatUsage | null; __model?: string }> {
+  const { data, usage, model } = await chatJsonWithUsage<Partial<AnalysisResult>>([
     {
       role: "system",
       content:
@@ -159,6 +175,8 @@ async function llmAnalyze(input: AnalyzeEvidenceInput): Promise<AnalysisResult> 
     : base.supportFlags;
 
   return {
+    __usage: usage,
+    __model: model,
     observed: Array.isArray(data.observed) ? data.observed.map(String).slice(0, 12) : base.observed,
     interpretation: Array.isArray(data.interpretation) ? data.interpretation.map(String).slice(0, 8) : base.interpretation,
     recommendation: Array.isArray(data.recommendation) ? data.recommendation.map(String).slice(0, 6) : base.recommendation,
@@ -174,12 +192,15 @@ export async function draftFeedback(
   input: FeedbackDraftInput
 ): Promise<WithSource<string>> {
   const llm = await tryLlm(() => llmFeedback(input));
-  if (llm) return { result: llm, source: "llm" };
+  if (llm) {
+    const { __usage, __model, draft } = llm;
+    return { result: draft, source: "llm", usage: __usage, model: __model };
+  }
   return { result: localDraftFeedback(input), source: "local_engine" };
 }
 
-async function llmFeedback(input: FeedbackDraftInput): Promise<string> {
-  const data = await chatJson<{ draft?: string }>([
+async function llmFeedback(input: FeedbackDraftInput): Promise<{ draft: string; __usage?: ChatUsage | null; __model?: string }> {
+  const { data, usage, model } = await chatJsonWithUsage<{ draft?: string }>([
     {
       role: "system",
       content:
@@ -193,7 +214,7 @@ async function llmFeedback(input: FeedbackDraftInput): Promise<string> {
   if (!data.draft || typeof data.draft !== "string" || data.draft.trim().length < 20) {
     throw new LlmUnavailableError("Feedback draft too short");
   }
-  return data.draft.trim().slice(0, 6000);
+  return { draft: data.draft.trim().slice(0, 6000), __usage: usage, __model: model };
 }
 
 export { isLlmConfigured };
