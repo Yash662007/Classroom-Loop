@@ -179,7 +179,7 @@ export function listCompetenciesWithStatus(userId: string) {
  */
 export function completeModule(userId: string, moduleId: string): { completed: number; total: number; trainingComplete: boolean } {
   const db = getDb();
-  const module = db
+  const moduleRow = db
     .prepare(
       `SELECT m.id,
               m.competency_id,
@@ -187,7 +187,7 @@ export function completeModule(userId: string, moduleId: string): { completed: n
        FROM training_modules m WHERE m.id = ?`
     )
     .get(moduleId) as { id: string; competency_id: string; total: number } | undefined;
-  if (!module) throw new ApiError(404, "Training module not found", "not_found");
+  if (!moduleRow) throw new ApiError(404, "Training module not found", "not_found");
 
   db.prepare(
     `INSERT OR IGNORE INTO module_completions (user_id, module_id, completed_at) VALUES (?, ?, ?)`
@@ -199,19 +199,19 @@ export function completeModule(userId: string, moduleId: string): { completed: n
         `SELECT COUNT(*) AS n FROM module_completions
          WHERE user_id = ? AND module_id IN (SELECT id FROM training_modules WHERE competency_id = ?)`
       )
-      .get(userId, module.competency_id) as { n: number }
+      .get(userId, moduleRow.competency_id) as { n: number }
   ).n;
-  const trainingComplete = module.total > 0 && completed >= module.total;
+  const trainingComplete = moduleRow.total > 0 && completed >= moduleRow.total;
   if (trainingComplete) {
     // Idempotent: recording repeats is a no-op thanks to the unique event index.
     recordWorkflowEvent({
       userId,
-      competencyId: module.competency_id,
+      competencyId: moduleRow.competency_id,
       state: "TRAINING_COMPLETE",
-      detail: `Completed ${completed}/${module.total} training modules`,
+      detail: `Completed ${completed}/${moduleRow.total} training modules`,
     });
   }
-  return { completed, total: module.total, trainingComplete };
+  return { completed, total: moduleRow.total, trainingComplete };
 }
 
 export function submitCompetencyCheck(

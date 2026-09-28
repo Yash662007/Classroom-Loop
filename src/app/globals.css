@@ -65,3 +65,25 @@ body {
     @apply bg-navy-950 text-white/90 text-xs px-4 py-1.5 text-center tracking-wide;
   }
 }
+
+/* Print (admin cohort report): chrome off, tables intact, page breaks clean. */
+@media print {
+  .no-print,
+  aside,
+  header,
+  nav {
+    display: none !important;
+  }
+  main {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+  .card {
+    box-shadow: none !important;
+    border-color: #d1d5db !important;
+    break-inside: avoid;
+  }
+  body {
+    background: white !important;
+  }
+}

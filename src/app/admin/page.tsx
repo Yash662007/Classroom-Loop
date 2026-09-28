@@ -48,7 +48,10 @@ export default function AdminOverviewPage() {
           <h1 className="text-2xl font-bold text-navy-900">District overview</h1>
           <p className="text-sm text-navy-900/60">Implementation activity aggregates — training completion is the start, not the success metric.</p>
         </div>
-        <span className="badge-amber">Demo data — simulated records</span>
+        <div className="flex items-center gap-2">
+          <Link href="/admin/reports" className="btn-secondary">Cohort report →</Link>
+          <span className="badge-amber">Demo data — simulated records</span>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

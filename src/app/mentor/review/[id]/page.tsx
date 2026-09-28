@@ -126,7 +126,7 @@ export default function ReviewPage() {
           {data.evidence.voiceFile && (
             <div className="mt-2">
               <p className="text-xs font-semibold uppercase tracking-wide text-navy-900/50 mb-1">Voice reflection</p>
-              {/* eslint-disable-next-line jsx-a11y/media-has-caption -- teacher's own voice memo */}
+              { }
               <audio controls src={`/api/mentor/uploads/${data.evidence.voiceFile.split(/[\\/]/).map(encodeURIComponent).join("/")}`} className="w-full max-w-sm" />
             </div>
           )}
@@ -196,7 +196,7 @@ export default function ReviewPage() {
           {aiDraftUsed && <span className="badge-neutral">AI-assisted draft</span>}
           {edited && <span className="badge-neutral">Edited by you</span>}
           <span className="text-xs text-navy-900/50">
-            Sending marks this evidence reviewed and advances the teacher's adoption to “feedback received”.
+            Sending marks this evidence reviewed and advances the teacher’s adoption to “feedback received”.
           </span>
         </div>
         {error && <div role="alert" className="mt-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2.5">{error}</div>}

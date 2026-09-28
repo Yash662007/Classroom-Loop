@@ -106,7 +106,7 @@ export default function EvidenceInsightPage() {
       ) : (
         <div className="card bg-softblue-50/60">
           <p className="text-sm text-navy-900/70">
-            Your mentor is reviewing this evidence. You'll see their feedback here once it's sent.
+            Your mentor is reviewing this evidence. You’ll see their feedback here once it’s sent.
           </p>
         </div>
       )}
@@ -114,7 +114,7 @@ export default function EvidenceInsightPage() {
       <div className="card bg-softblue-50/60">
         <p className="text-xs text-navy-900/60">
           <strong>How to read this:</strong> <em>Observed</em> is only what your evidence literally shows. <em>Interpreted</em> is the
-          AI's reading — a possibility, not a fact. <em>Recommended</em> is a suggestion. Your mentor reviews all of this before any
+          AI’s reading — a possibility, not a fact. <em>Recommended</em> is a suggestion. Your mentor reviews all of this before any
           feedback reaches you. AI assists — humans decide.
         </p>
       </div>
@@ -135,7 +135,7 @@ export default function EvidenceInsightPage() {
             {evidence.voiceFile && (
               <div className="mt-3">
                 <p className="text-xs font-semibold uppercase tracking-wide text-navy-900/50 mb-1">Voice reflection</p>
-                {/* eslint-disable-next-line jsx-a11y/media-has-caption -- teacher's own voice memo */}
+                { }
                 <audio controls src={`/api/teacher/uploads/${evidence.voiceFile.split(/[\\/]/).map(encodeURIComponent).join("/")}`} className="w-full max-w-sm" />
               </div>
             )}

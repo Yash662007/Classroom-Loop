@@ -16,6 +16,7 @@ import {
   LogOut,
   Menu,
   MoreHorizontal,
+  Printer,
   Settings,
   Sprout,
   Users,
@@ -53,6 +54,7 @@ const LINKS_BY_ROLE: Record<string, NavLink[]> = {
     { href: "/admin/analytics", label: "Implementation", icon: BarChart3 },
     { href: "/admin/adoption", label: "Adoption", icon: Sprout },
     { href: "/admin/support", label: "Intervention", icon: LifeBuoy },
+    { href: "/admin/reports", label: "Reports", icon: Printer },
   ],
 };
 

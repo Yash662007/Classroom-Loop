@@ -395,7 +395,7 @@ export default function TaskPage() {
                 onChange={(e) => setReflection(e.target.value)}
                 placeholder="Describe the lesson, your questions, who answered, what you noticed…"
               />
-              <p className="text-[11px] text-navy-900/40 mt-1">Typed text is saved on your device as you write; if you're offline, submit anyway and it will sync when connectivity returns.</p>
+              <p className="text-[11px] text-navy-900/40 mt-1">Typed text is saved on your device as you write; if you’re offline, submit anyway and it will sync when connectivity returns.</p>
             </div>
 
             <div>

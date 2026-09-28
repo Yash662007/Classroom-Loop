@@ -97,7 +97,7 @@ export function VoiceRecorder({ onSaved }: { onSaved: (audioFile: File | null) =
       )}
       {state === "recorded" && (
         <div className="space-y-2">
-          {/* eslint-disable-next-line jsx-a11y/media-has-caption -- teacher's own voice memo */}
+          { }
           <audio controls src={audioUrl ?? undefined} className="w-full max-w-sm" />
           <div className="flex items-center gap-2 text-xs text-navy-900/60">
             <Play className="w-3.5 h-3.5" aria-hidden /> {t("voice.saved")} ({mm}:{ss})
