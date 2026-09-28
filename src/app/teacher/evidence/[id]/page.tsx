@@ -137,7 +137,7 @@ export default function EvidenceInsightPage() {
               <div className="mt-3">
                 <p className="text-xs font-semibold uppercase tracking-wide text-navy-900/50 mb-1">Voice reflection</p>
                 { }
-                <audio controls src={`/api/teacher/uploads/${evidence.voiceFile.split(/[\\/]/).map(encodeURIComponent).join("/")}`} className="w-full max-w-sm" />
+                <audio controls src={`/api/teacher/uploads/${evidence.voiceFile.split(/[\\/]/).map(encodeURIComponent).join("/")}`} className="w-full max-w-sm" aria-label="Voice reflection recording" />
               </div>
             )}
             {evidence.voiceNote && <p className="text-xs text-navy-900/50 mt-2">Dictated transcript attached.</p>}
@@ -150,6 +150,7 @@ export default function EvidenceInsightPage() {
                   preload="metadata"
                   src={`/api/teacher/uploads/${evidence.videoFile.split(/[\\/]/).map(encodeURIComponent).join("/")}`}
                   className="rounded-lg border border-navy-900/10 max-h-72 w-auto"
+                  aria-label="Classroom video evidence"
                 />
               </div>
             )}

@@ -127,7 +127,7 @@ export default function ReviewPage() {
             <div className="mt-2">
               <p className="text-xs font-semibold uppercase tracking-wide text-navy-900/50 mb-1">Voice reflection</p>
               { }
-              <audio controls src={`/api/mentor/uploads/${data.evidence.voiceFile.split(/[\\/]/).map(encodeURIComponent).join("/")}`} className="w-full max-w-sm" />
+              <audio controls src={`/api/mentor/uploads/${data.evidence.voiceFile.split(/[\\/]/).map(encodeURIComponent).join("/")}`} className="w-full max-w-sm" aria-label="Teacher's voice reflection" />
             </div>
           )}
           {data.evidence.videoFile && (
@@ -139,6 +139,7 @@ export default function ReviewPage() {
                 preload="metadata"
                 src={`/api/mentor/uploads/${data.evidence.videoFile.split(/[\\/]/).map(encodeURIComponent).join("/")}`}
                 className="rounded-lg border border-navy-900/10 max-h-64 w-auto"
+                aria-label="Classroom video evidence"
               />
             </div>
           )}
