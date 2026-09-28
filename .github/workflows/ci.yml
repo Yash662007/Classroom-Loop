@@ -10,11 +10,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
 
       - name: Install dependencies
@@ -36,10 +36,10 @@ jobs:
         run: |
           npm start &
           for i in $(seq 1 30); do
-            curl -sf http://localhost:3000/api/health >/dev/null && break
+            curl -sf http://localhost:8080/api/health >/dev/null && break
             sleep 1
           done
-          curl -f http://localhost:3000/api/health
+          curl -f http://localhost:8080/api/health
 
       - name: 20-step acceptance journey (full loop E2E)
         run: node scripts/acceptance-journey.mjs
