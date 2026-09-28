@@ -35,7 +35,7 @@ export function ImplementationActionCard({
       )}
 
       <div className="mt-4 rounded-lg bg-softblue-50 border border-softblue-100 p-4">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Today's action</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Today’s action</p>
         <p className="text-sm text-navy-900/90 whitespace-pre-line">{objective}</p>
       </div>
 

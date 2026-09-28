@@ -153,6 +153,7 @@ export function createSchema(db: BetterSqlite3.Database): void {
       checklist TEXT NOT NULL DEFAULT '{}',
       photo_path TEXT,
       voice_file TEXT,
+      video_file TEXT,
       status TEXT NOT NULL DEFAULT 'submitted' CHECK (status IN ('submitted', 'analyzed')),
       client_token TEXT UNIQUE,
       submitted_at TEXT NOT NULL
@@ -254,7 +255,21 @@ export function createSchema(db: BetterSqlite3.Database): void {
   `);
 
   migrateMentorFeedbackDraftedBy(db);
-  migrateEvidenceVoiceFile(db);
+  migrateEvidenceMediaColumns(db);
+}
+
+/**
+ * Adds the voice_file / video_file columns to evidence_submissions for DBs
+ * created before voice (GOAL 16) and video (GOAL 17) media evidence.
+ */
+function migrateEvidenceMediaColumns(db: BetterSqlite3.Database): void {
+  const cols = db.prepare(`PRAGMA table_info(evidence_submissions)`).all() as Array<{ name: string }>;
+  if (!cols.some((c) => c.name === "voice_file")) {
+    db.exec(`ALTER TABLE evidence_submissions ADD COLUMN voice_file TEXT;`);
+  }
+  if (!cols.some((c) => c.name === "video_file")) {
+    db.exec(`ALTER TABLE evidence_submissions ADD COLUMN video_file TEXT;`);
+  }
 }
 
 /**

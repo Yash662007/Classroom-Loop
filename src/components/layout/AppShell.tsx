@@ -16,7 +16,9 @@ import {
   LogOut,
   Menu,
   MoreHorizontal,
+  Printer,
   Settings,
+  SlidersHorizontal,
   Sprout,
   Users,
   X,
@@ -41,6 +43,7 @@ const LINKS_BY_ROLE: Record<string, NavLink[]> = {
     { href: "/teacher/task", label: "My Task", icon: ClipboardList },
     { href: "/teacher/history", label: "Progress & History", icon: History },
     { href: "/teacher/context", label: "My Context", icon: Settings },
+    { href: "/teacher/settings", label: "Settings", icon: SlidersHorizontal },
   ],
   mentor: [
     { href: "/mentor", label: "Dashboard", icon: LayoutDashboard },
@@ -53,6 +56,7 @@ const LINKS_BY_ROLE: Record<string, NavLink[]> = {
     { href: "/admin/analytics", label: "Implementation", icon: BarChart3 },
     { href: "/admin/adoption", label: "Adoption", icon: Sprout },
     { href: "/admin/support", label: "Intervention", icon: LifeBuoy },
+    { href: "/admin/reports", label: "Reports", icon: Printer },
   ],
 };
 

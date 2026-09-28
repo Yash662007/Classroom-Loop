@@ -45,7 +45,7 @@ export function NeedHelpButton({ taskId }: { taskId: string }) {
   return (
     <div className="space-y-2" data-testid="need-help">
       {!open && (
-        <button type="button" className="text-sm text-blue-600 underline inline-flex items-center gap-1.5" onClick={() => setOpen(true)}>
+        <button type="button" className="text-sm text-blue-600 underline inline-flex items-center gap-1.5 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-600" onClick={() => setOpen(true)} aria-expanded={open}>
           <LifeBuoy className="w-4 h-4" aria-hidden /> {t("support.title")}
         </button>
       )}

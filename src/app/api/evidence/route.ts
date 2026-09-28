@@ -20,6 +20,7 @@ export async function POST(req: Request) {
     let checklist: Record<string, boolean>;
     let photoPath: string | null = null;
     let voiceFilePath: string | null = null;
+    let videoFilePath: string | null = null;
     let clientToken: string | null = req.headers.get("x-idempotency-key");
 
     const contentType = req.headers.get("content-type") ?? "";
@@ -61,6 +62,20 @@ export async function POST(req: Request) {
         const { saveUpload } = await import("@/lib/uploads");
         voiceFilePath = await saveUpload(auth.id, voiceFile);
       }
+
+      // Video evidence (GOAL 17): short classroom clips, same 5 MB cap.
+      const videoFile = form.get("video_file");
+      if (videoFile && videoFile instanceof File && videoFile.size > 0) {
+        if (videoFile.size > 5 * 1024 * 1024) {
+          throw new ApiError(413, "Video must be 5 MB or smaller", "video_too_large");
+        }
+        const videoAllowed = ["video/webm", "video/mp4"];
+        if (!videoAllowed.includes(videoFile.type)) {
+          throw new ApiError(415, "Video must be WebM or MP4", "video_type");
+        }
+        const { saveUpload } = await import("@/lib/uploads");
+        videoFilePath = await saveUpload(auth.id, videoFile);
+      }
     } else {
       const body = evidenceSchema.parse(await req.json().catch(() => {
         throw new ApiError(400, "Request body must be valid JSON or multipart form data", "bad_json");
@@ -84,6 +99,7 @@ export async function POST(req: Request) {
       checklist,
       photoPath,
       voiceFilePath,
+      videoFilePath,
       clientToken,
     });
     return NextResponse.json(result, { status: result.duplicate ? 200 : 201 });

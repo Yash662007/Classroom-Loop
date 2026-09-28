@@ -14,6 +14,10 @@ const MIME: Record<string, string> = {
   m4a: "audio/mp4",
   ogg: "audio/ogg",
   mp3: "audio/mpeg",
+  // Video evidence uses distinct extensions because .webm/.mp4 are ambiguous
+  // between audio and video.
+  vwebm: "video/webm",
+  vmp4: "video/mp4",
 };
 
 export async function GET(req: Request, ctx: { params: Promise<{ path: string[] }> }) {

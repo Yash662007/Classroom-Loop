@@ -43,6 +43,7 @@ Stack: Next.js 15 (App Router) · TypeScript strict · SQLite (better-sqlite3, W
 
 ```bash
 npm test          # vitest unit suite (engine, domain logic, API contracts)
+npm run lint      # ESLint (also enforced during `npm run build` and in CI)
 npm run typecheck # tsc --noEmit
 ```
 
@@ -58,10 +59,29 @@ practice scenarios, evidence analysis and feedback drafts. To upgrade to an LLM
 (with automatic fallback to the local engine), set `OPENAI_API_KEY` — see
 `.env.example`. Set `JWT_SECRET` in production.
 
+## Evidence media & retention
+
+Teachers can attach photos (client-compressed), voice reflections (recorded
+in-app) and short classroom videos (recorded in-app or picked from a file) to
+evidence submissions — all capped at 5 MB, all optional, all playable to
+mentors in review. Every media type is stored under `data/uploads`.
+
+Data Saver (`/teacher/settings`): when on — or when a slow connection is
+detected — captured photos are held on-device until the teacher taps
+“Upload now”, instead of uploading or queueing automatically.
+
+Set `EVIDENCE_RETENTION_DAYS` to delete upload files older than the window on
+server boot and clear their database references (unset or `0` = retain
+indefinitely). See `.env.example`. Production deployments should move media to
+object storage with lifecycle rules and a CDN — local-disk retention is the
+single-node stopgap.
+
 ## Known limitations
 
 - Training-module completion is seeded, not yet editable in the UI.
-- The E2E journey script is manual, not wired into `npm test`/CI.
-- Admin "Reports" (printable export) page is not built; analytics pages cover the data.
+- Real speech-to-text on uploaded audio and LLM output verification need an
+  `OPENAI_API_KEY`; the AI analyzes typed/dictated text, not raw audio.
 - Single-node rate limiting and SQLite mean vertical scaling only; the AI layer
   falls back to the local engine when no LLM is configured or reachable.
+- Evidence media is stored on local disk; move to object storage + CDN for
+  multi-node production (retention window above is the local-disk stopgap).

@@ -46,6 +46,9 @@ export async function flushOutbox(): Promise<FlushOutcome> {
       if (item.voiceBlob && item.voiceType) {
         form.set("voice_file", item.voiceBlob, `voice.${item.voiceType.split("/")[1] ?? "webm"}`);
       }
+      if (item.videoBlob && item.videoType) {
+        form.set("video_file", item.videoBlob, `video.${item.videoType.split("/")[1] ?? "webm"}`);
+      }
 
       const res = await fetch("/api/evidence", {
         method: "POST",

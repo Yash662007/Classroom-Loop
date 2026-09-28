@@ -32,8 +32,15 @@ export function VoiceRecorder({ onSaved }: { onSaved: (audioFile: File | null) =
   );
 
   function start() {
+    // Explicit guard: the optional chain `?.getUserMedia(...).then(...)`
+    // short-circuits to undefined on browsers without mediaDevices, so the
+    // permission-denied fallback would never render. Check first, then call.
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setState("denied");
+      return;
+    }
     navigator.mediaDevices
-      ?.getUserMedia({ audio: true })
+      .getUserMedia({ audio: true })
       .then((stream) => {
         const rec = new MediaRecorder(stream);
         chunksRef.current = [];
@@ -97,11 +104,11 @@ export function VoiceRecorder({ onSaved }: { onSaved: (audioFile: File | null) =
       )}
       {state === "recorded" && (
         <div className="space-y-2">
-          {/* eslint-disable-next-line jsx-a11y/media-has-caption -- teacher's own voice memo */}
-          <audio controls src={audioUrl ?? undefined} className="w-full max-w-sm" />
+          { }
+          <audio controls src={audioUrl ?? undefined} className="w-full max-w-sm" aria-label="Voice reflection recording" />
           <div className="flex items-center gap-2 text-xs text-navy-900/60">
             <Play className="w-3.5 h-3.5" aria-hidden /> {t("voice.saved")} ({mm}:{ss})
-            <button type="button" className="underline" onClick={retake}>
+            <button type="button" className="underline rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-600" onClick={retake}>
               <RefreshCw className="w-3 h-3 inline" aria-hidden /> {t("voice.retake")}
             </button>
           </div>

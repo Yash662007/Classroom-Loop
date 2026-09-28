@@ -69,6 +69,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
         photoPath: evidence.photo_path,
         hasPhoto: Boolean(evidence.photo_path),
         voiceFile: evidence.voice_file ?? null,
+        videoFile: evidence.video_file ?? null,
         status: evidence.status,
         submittedAt: evidence.submitted_at,
       },

@@ -55,6 +55,7 @@ export interface EvidenceRow {
   checklist: string;
   photo_path: string | null;
   voice_file: string | null;
+  video_file: string | null;
   status: "submitted" | "analyzed";
   client_token: string | null;
   submitted_at: string;
@@ -179,7 +180,7 @@ export function listCompetenciesWithStatus(userId: string) {
  */
 export function completeModule(userId: string, moduleId: string): { completed: number; total: number; trainingComplete: boolean } {
   const db = getDb();
-  const module = db
+  const moduleRow = db
     .prepare(
       `SELECT m.id,
               m.competency_id,
@@ -187,7 +188,7 @@ export function completeModule(userId: string, moduleId: string): { completed: n
        FROM training_modules m WHERE m.id = ?`
     )
     .get(moduleId) as { id: string; competency_id: string; total: number } | undefined;
-  if (!module) throw new ApiError(404, "Training module not found", "not_found");
+  if (!moduleRow) throw new ApiError(404, "Training module not found", "not_found");
 
   db.prepare(
     `INSERT OR IGNORE INTO module_completions (user_id, module_id, completed_at) VALUES (?, ?, ?)`
@@ -199,19 +200,19 @@ export function completeModule(userId: string, moduleId: string): { completed: n
         `SELECT COUNT(*) AS n FROM module_completions
          WHERE user_id = ? AND module_id IN (SELECT id FROM training_modules WHERE competency_id = ?)`
       )
-      .get(userId, module.competency_id) as { n: number }
+      .get(userId, moduleRow.competency_id) as { n: number }
   ).n;
-  const trainingComplete = module.total > 0 && completed >= module.total;
+  const trainingComplete = moduleRow.total > 0 && completed >= moduleRow.total;
   if (trainingComplete) {
     // Idempotent: recording repeats is a no-op thanks to the unique event index.
     recordWorkflowEvent({
       userId,
-      competencyId: module.competency_id,
+      competencyId: moduleRow.competency_id,
       state: "TRAINING_COMPLETE",
-      detail: `Completed ${completed}/${module.total} training modules`,
+      detail: `Completed ${completed}/${moduleRow.total} training modules`,
     });
   }
-  return { completed, total: module.total, trainingComplete };
+  return { completed, total: moduleRow.total, trainingComplete };
 }
 
 export function submitCompetencyCheck(
@@ -445,6 +446,8 @@ export interface SubmitEvidenceInput {
   photoPath: string | null;
   /** Stored audio recording of the voice reflection (GOAL 16). */
   voiceFilePath?: string | null;
+  /** Stored classroom video clip (GOAL 17). */
+  videoFilePath?: string | null;
   clientToken: string | null;
 }
 
@@ -489,8 +492,8 @@ export async function submitEvidence(input: SubmitEvidenceInput): Promise<Submit
   // can be regenerated later. The AI is never allowed to destroy user data.
   const id = randomUUID();
   db.prepare(
-    `INSERT INTO evidence_submissions (id, user_id, task_id, attempt_number, reflection, voice_note, checklist, photo_path, voice_file, status, client_token, submitted_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted', ?, ?)`
+    `INSERT INTO evidence_submissions (id, user_id, task_id, attempt_number, reflection, voice_note, checklist, photo_path, voice_file, video_file, status, client_token, submitted_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted', ?, ?)`
   ).run(
     id,
     input.userId,
@@ -501,6 +504,7 @@ export async function submitEvidence(input: SubmitEvidenceInput): Promise<Submit
     JSON.stringify(input.checklist),
     input.photoPath,
     input.voiceFilePath ?? null,
+    input.videoFilePath ?? null,
     input.clientToken,
     new Date().toISOString()
   );

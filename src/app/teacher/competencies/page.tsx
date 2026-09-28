@@ -144,7 +144,7 @@ export default function CompetenciesPage() {
             <div className="border-t border-navy-900/10 pt-4">
               {c.check.status === "passed" ? (
                 <div className="flex flex-wrap items-center gap-3">
-                  <p className="text-sm text-navy-900/70">You're ready to implement. Generate a task personalized to your context and history.</p>
+                  <p className="text-sm text-navy-900/70">You’re ready to implement. Generate a task personalized to your context and history.</p>
                   <GenerateTaskButton competencyId={c.id} />
                   <Link href="/teacher/task" className="btn-secondary">View my task →</Link>
                 </div>

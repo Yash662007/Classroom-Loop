@@ -53,11 +53,11 @@ export function QualityCheck({ reflection, checklistCount }: { reflection: strin
       <ul className="space-y-1">
         {result.checks.map((c) => (
           <li key={c.label} className="flex items-start gap-1.5">
-            {c.passed ? (
-              <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 shrink-0 text-teal-600" aria-label="covered" />
-            ) : (
-              <CircleAlert className="w-3.5 h-3.5 mt-0.5 shrink-0 text-amber-600" aria-label="missing" />
-            )}
+          {c.passed ? (
+            <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 shrink-0 text-teal-600" role="img" aria-label="covered" />
+          ) : (
+            <CircleAlert className="w-3.5 h-3.5 mt-0.5 shrink-0 text-amber-600" role="img" aria-label="not covered yet" />
+          )}
             <span>{c.label}</span>
           </li>
         ))}

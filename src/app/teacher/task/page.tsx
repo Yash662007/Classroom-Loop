@@ -10,6 +10,7 @@ import { CardSkeleton } from "@/components/ui/Skeleton";
 import { ErrorState } from "@/components/ui/States";
 import { VoiceRecorder } from "@/components/evidence/VoiceRecorder";
 import { PhotoCapture } from "@/components/evidence/PhotoCapture";
+import { VideoRecorder } from "@/components/evidence/VideoRecorder";
 import { QualityCheck } from "@/components/evidence/QualityCheck";
 import { NeedHelpButton } from "@/components/evidence/NeedHelpButton";
 
@@ -48,6 +49,7 @@ export default function TaskPage() {
   const [voiceText, setVoiceText] = useState("");
   const [photo, setPhoto] = useState<File | null>(null);
   const [voiceFile, setVoiceFile] = useState<File | null>(null); // recorded audio (GOAL 16)
+  const [videoFile, setVideoFile] = useState<File | null>(null); // recorded classroom video (GOAL 17)
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState<{ evidenceId: string; duplicate: boolean } | null>(null);
@@ -238,6 +240,7 @@ export default function TaskPage() {
       form.set("client_token", key);
       if (photo) form.set("photo", photo);
       if (voiceFile) form.set("voice_file", voiceFile);
+      if (videoFile) form.set("video_file", videoFile);
 
       const r = await apiFetch<{ evidenceId: string; duplicate: boolean }>("/api/evidence", {
         method: "POST",
@@ -267,6 +270,8 @@ export default function TaskPage() {
           photoType: photo?.type ?? null,
           voiceBlob: voiceFile,
           voiceType: voiceFile?.type ?? null,
+          videoBlob: videoFile,
+          videoType: videoFile?.type ?? null,
           status: "queued",
           attempts: 0,
           lastError: null,
@@ -395,7 +400,7 @@ export default function TaskPage() {
                 onChange={(e) => setReflection(e.target.value)}
                 placeholder="Describe the lesson, your questions, who answered, what you noticed…"
               />
-              <p className="text-[11px] text-navy-900/40 mt-1">Typed text is saved on your device as you write; if you're offline, submit anyway and it will sync when connectivity returns.</p>
+              <p className="text-[11px] text-navy-900/40 mt-1">Typed text is saved on your device as you write; if you’re offline, submit anyway and it will sync when connectivity returns.</p>
             </div>
 
             <div>
@@ -420,6 +425,11 @@ export default function TaskPage() {
                 ))}
               </div>
             </fieldset>
+
+            <div>
+              <label className="label">Video evidence (optional · a short clip of the technique in your classroom · ≤5 MB · no student faces or names)</label>
+              <VideoRecorder onFile={setVideoFile} />
+            </div>
 
             <div>
               <label className="label">Photo of student work (optional · compressed automatically · no student faces or names)</label>

@@ -12,7 +12,7 @@ import { AIInsightCard } from "@/components/ai/AIInsightCard";
 interface ReviewData {
   evidence: {
     id: string; taskId: string; attemptNumber: number; reflection: string;
-    voiceNote: string | null; checklist: Record<string, boolean>; photoPath: string | null; voiceFile: string | null; submittedAt: string;
+    voiceNote: string | null; checklist: Record<string, boolean>; photoPath: string | null; voiceFile: string | null; videoFile: string | null; submittedAt: string;
   };
   analysis: {
     observed: string[]; interpretation: string[]; recommendation: string[];
@@ -126,8 +126,21 @@ export default function ReviewPage() {
           {data.evidence.voiceFile && (
             <div className="mt-2">
               <p className="text-xs font-semibold uppercase tracking-wide text-navy-900/50 mb-1">Voice reflection</p>
-              {/* eslint-disable-next-line jsx-a11y/media-has-caption -- teacher's own voice memo */}
-              <audio controls src={`/api/mentor/uploads/${data.evidence.voiceFile.split(/[\\/]/).map(encodeURIComponent).join("/")}`} className="w-full max-w-sm" />
+              { }
+              <audio controls src={`/api/mentor/uploads/${data.evidence.voiceFile.split(/[\\/]/).map(encodeURIComponent).join("/")}`} className="w-full max-w-sm" aria-label="Teacher's voice reflection" />
+            </div>
+          )}
+          {data.evidence.videoFile && (
+            <div className="mt-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-navy-900/50 mb-1">Video evidence</p>
+              <video
+                controls
+                playsInline
+                preload="metadata"
+                src={`/api/mentor/uploads/${data.evidence.videoFile.split(/[\\/]/).map(encodeURIComponent).join("/")}`}
+                className="rounded-lg border border-navy-900/10 max-h-64 w-auto"
+                aria-label="Classroom video evidence"
+              />
             </div>
           )}
           {photoSrc && (
@@ -196,7 +209,7 @@ export default function ReviewPage() {
           {aiDraftUsed && <span className="badge-neutral">AI-assisted draft</span>}
           {edited && <span className="badge-neutral">Edited by you</span>}
           <span className="text-xs text-navy-900/50">
-            Sending marks this evidence reviewed and advances the teacher's adoption to “feedback received”.
+            Sending marks this evidence reviewed and advances the teacher’s adoption to “feedback received”.
           </span>
         </div>
         {error && <div role="alert" className="mt-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2.5">{error}</div>}
