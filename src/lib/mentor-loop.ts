@@ -8,6 +8,7 @@ import { randomUUID } from "node:crypto";
 import { ApiError } from "./api";
 import { getDb } from "@/db/instance";
 import { draftFeedback } from "./ai/service";
+import { recordLlmUsage } from "./llm-usage";
 import { getAnalysisByEvidenceId, getEvidence, getImplementationHistory, getContext } from "./teacher-loop";
 import type { EvidenceRow } from "./teacher-loop";
 import { recordAdoptionEvent, getAdoptionStatus } from "./adoption";
@@ -350,6 +351,9 @@ export async function createFeedbackDraft(mentorId: string, evidenceId: string):
     `INSERT INTO mentor_feedback (id, evidence_id, mentor_id, draft, status, drafted_by, edited_by_mentor, created_at)
      VALUES (?, ?, ?, ?, 'drafted', ?, 0, ?)`
   ).run(id, evidenceId, mentorId, draft, draftResult.source, new Date().toISOString());
+  if (draftResult.source === "llm") {
+    recordLlmUsage({ artifactKind: "feedback_draft", artifactId: id, usage: draftResult.usage ?? null, model: draftResult.model });
+  }
   return { id, draft, draftedBy: draftResult.source };
 }
 

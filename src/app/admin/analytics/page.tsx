@@ -8,6 +8,8 @@ interface Metrics {
   analysesBySource: { local_engine: number; llm: number };
   feedbackDrafted: number; feedbackSent: number; retriesStarted: number;
   avgTimeToFirstAttemptHours: number | null; avgFeedbackTurnaroundHours: number | null; supportFlaggedAnalyses: number;
+  funnelDropOff: Array<{ stage: string; label: string; teachers: number; stepDropOffPercent: number | null }>;
+  llmUsage: { totalCalls: number; promptTokens: number; completionTokens: number; totalTokens: number; byArtifact: Array<{ artifactKind: string; calls: number; totalTokens: number }> };
 }
 
 export default function ImplementationAnalyticsPage() {
@@ -50,6 +52,77 @@ export default function ImplementationAnalyticsPage() {
             <p className="text-xs text-navy-900/55 mt-1">{s.label}</p>
           </div>
         ))}
+      </div>
+
+      <div className="card">
+        <h2 className="label">Drop-off by stage (where teachers are lost)</h2>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs uppercase tracking-wide text-navy-900/50">
+                <th className="py-2 pr-4">Stage</th>
+                <th className="py-2 pr-4">Teachers</th>
+                <th className="py-2">Step drop-off</th>
+              </tr>
+            </thead>
+            <tbody>
+              {m.funnelDropOff.map((d) => (
+                <tr key={d.stage} className="border-t border-navy-900/10">
+                  <td className="py-2.5 pr-4 font-medium">{d.label}</td>
+                  <td className="py-2.5 pr-4">{d.teachers}</td>
+                  <td className={`py-2.5 ${d.stepDropOffPercent != null && d.stepDropOffPercent >= 50 ? "text-red-700 font-semibold" : ""}`}>
+                    {d.stepDropOffPercent != null ? `${d.stepDropOffPercent}%` : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="text-[11px] text-navy-900/40 mt-3">
+          Drop-off = share of the previous stage&apos;s cohort not reaching this stage. Stage-to-stage loss, never a teacher ranking.
+        </p>
+      </div>
+
+      <div className="card">
+        <h2 className="label">LLM usage &amp; cost signal</h2>
+        {m.llmUsage.totalCalls === 0 ? (
+          <p className="text-sm text-navy-900/55">
+            No LLM calls recorded — the deterministic rubric engine handled everything (or no provider is configured). Token usage appears here automatically when the LLM upgrade is active.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { label: "LLM calls", value: m.llmUsage.totalCalls },
+                { label: "Prompt tokens", value: m.llmUsage.promptTokens },
+                { label: "Completion tokens", value: m.llmUsage.completionTokens },
+              ].map((s) => (
+                <div key={s.label} className="rounded-lg border border-slate-200 px-3 py-2.5 text-center">
+                  <p className="text-lg font-bold text-navy-900">{s.value}</p>
+                  <p className="text-xs text-navy-900/55">{s.label}</p>
+                </div>
+              ))}
+            </div>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs uppercase tracking-wide text-navy-900/50">
+                  <th className="py-2 pr-4">Artifact</th>
+                  <th className="py-2 pr-4">Calls</th>
+                  <th className="py-2">Total tokens</th>
+                </tr>
+              </thead>
+              <tbody>
+                {m.llmUsage.byArtifact.map((a) => (
+                  <tr key={a.artifactKind} className="border-t border-navy-900/10">
+                    <td className="py-2.5 pr-4 font-medium">{a.artifactKind.replace(/_/g, " ")}</td>
+                    <td className="py-2.5 pr-4">{a.calls}</td>
+                    <td className="py-2.5">{a.totalTokens}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       <div className="card bg-softblue-50/60">

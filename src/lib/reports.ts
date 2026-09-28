@@ -9,6 +9,7 @@ import type {
   ImplementationMetrics,
   InterventionTeacher,
 } from "@/lib/analytics";
+import type { LlmUsageSummary, StageDropOff } from "@/lib/analytics";
 import { STAGE_LABEL } from "@/lib/labels";
 
 export type ReportCell = string | number | null | undefined;
@@ -26,7 +27,10 @@ export interface CohortReport {
 
 export function buildReportSections(
   funnel: FunnelResponse[],
-  metrics: ImplementationMetrics,
+  metrics: ImplementationMetrics & {
+    funnelDropOff?: StageDropOff[];
+    llmUsage?: LlmUsageSummary;
+  },
   adoption: AdoptionDistribution,
   intervention: InterventionTeacher[]
 ): ReportSection[] {
@@ -79,6 +83,19 @@ export function buildReportSections(
         t.evidencePending,
       ]),
     },
+    ...(metrics.llmUsage && metrics.llmUsage.totalCalls > 0
+      ? [
+          {
+            title: "LLM usage (metered)",
+            columns: ["Artifact", "Calls", "Total tokens"],
+            rows: metrics.llmUsage.byArtifact.map((a: { artifactKind: string; calls: number; totalTokens: number }) => [
+              a.artifactKind,
+              a.calls,
+              a.totalTokens,
+            ]),
+          },
+        ]
+      : []),
   ];
 }
 
