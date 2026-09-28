@@ -14,7 +14,6 @@ import { createServer, type Server } from "node:http";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type AddressInfo from "node:net";
 
 import { getDb, resetDbForTests } from "@/db/instance";
 import { analyzeEvidence, draftFeedback, generatePersonalization } from "@/lib/ai/service";
@@ -48,7 +47,8 @@ beforeAll(async () => {
     });
   });
   await new Promise<void>((resolve) => server!.listen(0, "127.0.0.1", resolve));
-  baseUrl = `http://127.0.0.1:${(server!.address() as AddressInfo).port}/v1`;
+  const addr = server!.address() as { port: number };
+  baseUrl = `http://127.0.0.1:${addr.port}/v1`;
 });
 
 afterAll(async () => {
