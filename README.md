@@ -66,6 +66,10 @@ in-app) and short classroom videos (recorded in-app or picked from a file) to
 evidence submissions — all capped at 5 MB, all optional, all playable to
 mentors in review. Every media type is stored under `data/uploads`.
 
+Data Saver (`/teacher/settings`): when on — or when a slow connection is
+detected — captured photos are held on-device until the teacher taps
+“Upload now”, instead of uploading or queueing automatically.
+
 Set `EVIDENCE_RETENTION_DAYS` to delete upload files older than the window on
 server boot and clear their database references (unset or `0` = retain
 indefinitely). See `.env.example`. Production deployments should move media to

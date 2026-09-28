@@ -175,7 +175,7 @@ export function VideoRecorder({ onFile }: { onFile: (file: File | null) => void 
             src={previewUrl ?? undefined}
             className="rounded-lg border border-slate-200 max-h-56 w-auto"
           />
-          <button type="button" className="text-xs underline text-navy-900/60" onClick={retake}>
+          <button type="button" className="text-xs underline text-navy-900/60 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-600" onClick={retake}>
             <RefreshCw className="w-3 h-3 inline" aria-hidden /> Remove video
           </button>
         </div>
@@ -191,7 +191,7 @@ export function VideoRecorder({ onFile }: { onFile: (file: File | null) => void 
       {state === "error" && (
         <div className="space-y-2">
           <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
-          <button type="button" className="text-xs underline text-navy-900/60" onClick={retake}>
+          <button type="button" className="text-xs underline text-navy-900/60 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-600" onClick={retake}>
             <RefreshCw className="w-3 h-3 inline" aria-hidden /> Try again
           </button>
         </div>

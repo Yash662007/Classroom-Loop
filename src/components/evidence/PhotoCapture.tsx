@@ -10,8 +10,9 @@
  * (GOAL 55) is kept next to the control.
  */
 import { useRef, useState } from "react";
-import { Camera, Image as ImageIcon, RefreshCw } from "lucide-react";
+import { Camera, Image as ImageIcon, RefreshCw, Upload } from "lucide-react";
 import { t } from "@/lib/i18n";
+import { isDataSaverActive } from "@/lib/data-saver";
 
 const MAX_EDGE = 1600;
 const JPEG_QUALITY = 0.8;
@@ -43,6 +44,10 @@ export function PhotoCapture({ onFile }: { onFile: (file: File | null) => void }
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Data Saver (GOAL 23): when active, a captured photo is HELD — onFile stays
+  // null so submission never enqueues/uploads it — until "Upload now" is tapped.
+  const [held, setHeld] = useState<File | null>(null);
+  const [dataSaver, setDataSaver] = useState(false);
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
 
@@ -57,10 +62,22 @@ export function PhotoCapture({ onFile }: { onFile: (file: File | null) => void }
       return;
     }
     setPreviewUrl((old) => {
-      if (old) URL.revokeObjectURL(old);
-      return URL.createObjectURL(processed);
+    if (old) URL.revokeObjectURL(old);
+    return URL.createObjectURL(processed);
     });
-    onFile(processed);
+    if (isDataSaverActive()) {
+      setHeld(processed);
+      onFile(null); // hold: do not hand the photo to the submission/outbox path
+    } else {
+      setHeld(null);
+      onFile(processed);
+    }
+  }
+
+  function uploadNow() {
+    if (!held) return;
+    setHeld(null);
+    onFile(held); // hand the photo to the normal submission path
   }
 
   function retake() {
@@ -68,6 +85,7 @@ export function PhotoCapture({ onFile }: { onFile: (file: File | null) => void }
       if (old) URL.revokeObjectURL(old);
       return null;
     });
+    setHeld(null);
     onFile(null);
   }
 
@@ -105,9 +123,25 @@ export function PhotoCapture({ onFile }: { onFile: (file: File | null) => void }
         <div className="space-y-2">
           {/* eslint-disable-next-line @next/next/no-img-element -- local object URL preview */}
           <img src={previewUrl} alt="Photo evidence preview" className="rounded-lg border border-slate-200 max-h-56 w-auto" />
-          <button type="button" className="text-xs underline text-navy-900/60" onClick={retake}>
-            <RefreshCw className="w-3 h-3 inline" aria-hidden /> {t("photo.retake")}
-          </button>
+          {held ? (
+            <div className="space-y-2">
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                Data Saver is on — this photo is held on your device and is not part of your evidence yet.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" className="btn-primary text-sm" onClick={uploadNow}>
+                  <Upload className="w-4 h-4" aria-hidden /> Upload now
+                </button>
+                <button type="button" className="text-xs underline text-navy-900/60 self-center rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-600" onClick={retake}>
+                  <RefreshCw className="w-3 h-3 inline" aria-hidden /> {t("photo.retake")}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button type="button" className="text-xs underline text-navy-900/60 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-600" onClick={retake}>
+              <RefreshCw className="w-3 h-3 inline" aria-hidden /> {t("photo.retake")}
+            </button>
+          )}
         </div>
       )}
 
