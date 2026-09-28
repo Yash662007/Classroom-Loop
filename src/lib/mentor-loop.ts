@@ -240,6 +240,7 @@ export interface MentorEvidenceView {
     checklist: Record<string, boolean>;
     photoPath: string | null;
     voiceFile: string | null;
+    videoFile: string | null;
     submittedAt: string;
   };
   analysis: ReturnType<typeof getAnalysisByEvidenceId>;
@@ -290,6 +291,7 @@ export function getMentorEvidenceView(mentorId: string, evidenceId: string): Men
       checklist: JSON.parse(evidence.checklist) as Record<string, boolean>,
       photoPath: evidence.photo_path,
       voiceFile: evidence.voice_file ?? null,
+      videoFile: evidence.video_file ?? null,
       submittedAt: evidence.submitted_at,
     },
     analysis: getAnalysisByEvidenceId(evidenceId),

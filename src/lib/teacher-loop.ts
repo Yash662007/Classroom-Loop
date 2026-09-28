@@ -55,6 +55,7 @@ export interface EvidenceRow {
   checklist: string;
   photo_path: string | null;
   voice_file: string | null;
+  video_file: string | null;
   status: "submitted" | "analyzed";
   client_token: string | null;
   submitted_at: string;
@@ -445,6 +446,8 @@ export interface SubmitEvidenceInput {
   photoPath: string | null;
   /** Stored audio recording of the voice reflection (GOAL 16). */
   voiceFilePath?: string | null;
+  /** Stored classroom video clip (GOAL 17). */
+  videoFilePath?: string | null;
   clientToken: string | null;
 }
 
@@ -489,8 +492,8 @@ export async function submitEvidence(input: SubmitEvidenceInput): Promise<Submit
   // can be regenerated later. The AI is never allowed to destroy user data.
   const id = randomUUID();
   db.prepare(
-    `INSERT INTO evidence_submissions (id, user_id, task_id, attempt_number, reflection, voice_note, checklist, photo_path, voice_file, status, client_token, submitted_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted', ?, ?)`
+    `INSERT INTO evidence_submissions (id, user_id, task_id, attempt_number, reflection, voice_note, checklist, photo_path, voice_file, video_file, status, client_token, submitted_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted', ?, ?)`
   ).run(
     id,
     input.userId,
@@ -501,6 +504,7 @@ export async function submitEvidence(input: SubmitEvidenceInput): Promise<Submit
     JSON.stringify(input.checklist),
     input.photoPath,
     input.voiceFilePath ?? null,
+    input.videoFilePath ?? null,
     input.clientToken,
     new Date().toISOString()
   );

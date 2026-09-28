@@ -43,6 +43,9 @@ export interface OutboxItem {
   /** Voice-note audio recorded on device (GOAL 16); synced like the photo. */
   voiceBlob: Blob | null;
   voiceType: string | null;
+  /** Classroom video clip recorded on device (GOAL 17); synced like the photo. */
+  videoBlob: Blob | null;
+  videoType: string | null;
   status: OutboxStatus;
   attempts: number;
   lastError: string | null;

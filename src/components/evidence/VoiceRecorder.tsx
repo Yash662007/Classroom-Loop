@@ -32,8 +32,15 @@ export function VoiceRecorder({ onSaved }: { onSaved: (audioFile: File | null) =
   );
 
   function start() {
+    // Explicit guard: the optional chain `?.getUserMedia(...).then(...)`
+    // short-circuits to undefined on browsers without mediaDevices, so the
+    // permission-denied fallback would never render. Check first, then call.
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setState("denied");
+      return;
+    }
     navigator.mediaDevices
-      ?.getUserMedia({ audio: true })
+      .getUserMedia({ audio: true })
       .then((stream) => {
         const rec = new MediaRecorder(stream);
         chunksRef.current = [];

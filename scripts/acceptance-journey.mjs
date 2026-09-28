@@ -247,6 +247,47 @@ const mentorVoice = await get(tm, `/api/mentor/evidence/${voiceJson.evidenceId}`
 ok(Boolean(mentorVoice.evidence?.voiceFile), "S16e mentor review view exposes the voice file", mentorVoice.evidence?.voiceFile);
 step("S16e voice evidence: recorded audio stored, served, visible to mentor");
 
+/* ---- Video evidence: real clip stored, served, visible to mentor (GOAL 17) ---- */
+
+// Minimal MP4 signature (ftyp box) — the leading bytes video/mp4 files carry.
+const MP4 = Buffer.from("000000206674797069736F6D0000020069736F6D6D703431", "hex");
+const videoRes = await fetch(`${BASE}/api/evidence`, {
+  method: "POST",
+  headers: { cookie: tb, "x-idempotency-key": "acc-video-token-1" },
+  body: (() => {
+    const f = new FormData();
+    f.set("task_id", retry.task.id);
+    f.set("reflection", "Recorded a short clip of the pair-share round: students turned to partners and two shared their reasoning with the class.");
+    f.set("checklist", JSON.stringify({}));
+    f.append("video_file", new Blob([MP4], { type: "video/mp4" }), "classroom.vmp4");
+    return f;
+  })(),
+});
+ok(videoRes.status === 201, "S16g video evidence accepted", videoRes.status);
+const videoJson = await videoRes.json();
+const videoView = await get(tb, `/api/teacher/evidence/${videoJson.evidenceId}`);
+ok(Boolean(videoView.evidence.videoFile), "S16g video file stored on the evidence", videoView.evidence.videoFile);
+const videoPath = videoView.evidence.videoFile.split(/[\\/]/).map(encodeURIComponent).join("/");
+const videoServe = await fetch(`${BASE}/api/teacher/uploads/${videoPath}`, { headers: { cookie: tb } });
+ok(videoServe.status === 200 && (videoServe.headers.get("content-type") || "").includes("video/mp4"),
+  "S16g video file served as video/mp4", { status: videoServe.status, type: videoServe.headers.get("content-type") });
+const mentorVideo = await get(tm, `/api/mentor/evidence/${videoJson.evidenceId}`);
+ok(Boolean(mentorVideo.evidence?.videoFile), "S16g mentor review view exposes the video file", mentorVideo.evidence?.videoFile);
+const badVideo = await fetch(`${BASE}/api/evidence`, {
+  method: "POST",
+  headers: { cookie: tb },
+  body: (() => {
+    const f = new FormData();
+    f.set("task_id", retry.task.id);
+    f.set("reflection", "bad video type probe");
+    f.set("checklist", JSON.stringify({}));
+    f.append("video_file", new Blob([Buffer.from("not a video")], { type: "text/plain" }), "x.txt");
+    return f;
+  })(),
+});
+ok(badVideo.status === 415, "S16g non-video video_file rejected with 415", badVideo.status);
+step("S16g video evidence: clip stored, served, visible to mentor; 415 on non-video");
+
 /* ---- Support request (Master Task GOAL 31) ---- */
 
 const supRes = await fetch(`${BASE}/api/support`, {

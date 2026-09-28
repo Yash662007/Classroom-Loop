@@ -21,6 +21,7 @@ interface EvidenceView {
   photoPath: string | null;
   hasPhoto: boolean;
   voiceFile: string | null;
+  videoFile: string | null;
   status: string;
   submittedAt: string;
 }
@@ -140,6 +141,18 @@ export default function EvidenceInsightPage() {
               </div>
             )}
             {evidence.voiceNote && <p className="text-xs text-navy-900/50 mt-2">Dictated transcript attached.</p>}
+            {evidence.videoFile && (
+              <div className="mt-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-navy-900/50 mb-1">Video evidence</p>
+                <video
+                  controls
+                  playsInline
+                  preload="metadata"
+                  src={`/api/teacher/uploads/${evidence.videoFile.split(/[\\/]/).map(encodeURIComponent).join("/")}`}
+                  className="rounded-lg border border-navy-900/10 max-h-72 w-auto"
+                />
+              </div>
+            )}
             {photoSrc && (
               <div className="mt-3">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
