@@ -8,6 +8,8 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { CardSkeleton } from "@/components/ui/Skeleton";
 import { ErrorState } from "@/components/ui/States";
 import { AIInsightCard } from "@/components/ai/AIInsightCard";
+import { RetryCoach } from "@/components/implementation/RetryCoach";
+import { WhatChanged } from "@/components/implementation/WhatChanged";
 
 interface EvidenceView {
   id: string;
@@ -18,6 +20,7 @@ interface EvidenceView {
   checklist: Record<string, boolean>;
   photoPath: string | null;
   hasPhoto: boolean;
+  voiceFile: string | null;
   status: string;
   submittedAt: string;
 }
@@ -42,13 +45,19 @@ interface FeedbackView {
   draftedBy: string;
 }
 
+interface WhatChangedData {
+  before: { attemptNumber: number; reflection: string; rubricHits: string[] };
+  after: { attemptNumber: number; reflection: string; rubricHits: string[] };
+  mentorNote: string | null;
+}
+
 export default function EvidenceInsightPage() {
   const params = useParams<{ id: string }>();
-  const [data, setData] = useState<{ evidence: EvidenceView; analysis: AnalysisView | null; feedback: FeedbackView | null } | null>(null);
+  const [data, setData] = useState<{ evidence: EvidenceView; competencyId: string | null; analysis: AnalysisView | null; feedback: FeedbackView | null; whatChanged: WhatChangedData | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    apiFetch<{ evidence: EvidenceView; analysis: AnalysisView | null; feedback: FeedbackView | null }>(`/api/teacher/evidence/${params.id}`)
+    apiFetch<{ evidence: EvidenceView; competencyId: string | null; analysis: AnalysisView | null; feedback: FeedbackView | null; whatChanged: WhatChangedData | null }>(`/api/teacher/evidence/${params.id}`)
       .then(setData)
       .catch((err) => setError((err as Error).message));
   }, [params.id]);
@@ -81,9 +90,18 @@ export default function EvidenceInsightPage() {
             </span>
           </div>
           <div className="text-sm text-navy-900/85 whitespace-pre-wrap">{feedback!.message}</div>
-          <div className="mt-4">
-            <Link href="/teacher/history" className="btn-teal">Retry with a new attempt →</Link>
-          </div>
+          {data.competencyId && (
+            <div className="mt-4">
+              <RetryCoach
+                competencyId={data.competencyId}
+                attemptNumber={evidence.attemptNumber}
+                feedbackMessage={feedback!.message}
+                aiRecommendation={analysis?.recommendation ?? []}
+                previousReflection={evidence.reflection}
+                retryAvailable
+              />
+            </div>
+          )}
         </div>
       ) : (
         <div className="card bg-softblue-50/60">
@@ -107,10 +125,21 @@ export default function EvidenceInsightPage() {
         <>
         <AIInsightCard analysis={analysis} variant="full" />
 
+        {data.whatChanged && (
+          <WhatChanged before={data.whatChanged.before} after={data.whatChanged.after} mentorNote={data.whatChanged.mentorNote} />
+        )}
+
           <div className="card">
             <h2 className="label">What you submitted</h2>
             <p className="text-sm text-navy-900/80 whitespace-pre-wrap">{evidence.reflection}</p>
-            {evidence.voiceNote && <p className="text-xs text-navy-900/50 mt-2">Voice note transcript attached.</p>}
+            {evidence.voiceFile && (
+              <div className="mt-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-navy-900/50 mb-1">Voice reflection</p>
+                {/* eslint-disable-next-line jsx-a11y/media-has-caption -- teacher's own voice memo */}
+                <audio controls src={`/api/teacher/uploads/${evidence.voiceFile.split(/[\\/]/).map(encodeURIComponent).join("/")}`} className="w-full max-w-sm" />
+              </div>
+            )}
+            {evidence.voiceNote && <p className="text-xs text-navy-900/50 mt-2">Dictated transcript attached.</p>}
             {photoSrc && (
               <div className="mt-3">
                 {/* eslint-disable-next-line @next/next/no-img-element */}

@@ -2,7 +2,7 @@
  * Acceptance journey (20 steps) against the production build on a fresh seed.
  * Zero dependencies — plain Node (fetch + node:assert). Run: node data/acceptance-journey.mjs
  */
-const BASE = "http://localhost:3000";
+const BASE = "http://localhost:8080";
 let passed = 0;
 function step(label) { passed++; console.log("PASS ", label); }
 function fail(label, extra) {
@@ -42,10 +42,12 @@ const post = async (cookie, path, body) => {
 /* ---- Teacher B journey ---- */
 
 const tb = await loginCookie("teacher.b@classroomloop.demo", "demo1234");
+const teacherB = { id: "" }; // resolved below from /auth/me
 step("S1  teacher login 200 + session cookie");
 
 const me = await get(tb, "/api/auth/me");
 ok(me.user?.role === "teacher", "S2 /auth/me role", me);
+teacherB.id = me.user.id;
 step("S2  /auth/me resolves role=teacher (cookie token verified)");
 
 const comps = await get(tb, "/api/teacher/competencies");
@@ -111,6 +113,7 @@ step("S10 Observed/Interpreted/Recommended all present; all 5 criteria evidenced
 /* ---- Mentor half ---- */
 
 const tm = await loginCookie("mentor@classroomloop.demo", "demo1234");
+const ta = await loginCookie("admin@classroomloop.demo", "demo1234");
 const queue = await get(tm, "/api/mentor/queue");
 ok(queue.queue?.some((q) => q.evidenceId === evidenceId), "S11 queue contains new attempt", queue.queue?.map((q) => q.evidenceId));
 step("S11 mentor queue contains the new B attempt");
@@ -216,6 +219,54 @@ const tooBig = await fetch(`${BASE}/api/evidence`, {
 ok(tooBig.status === 413, "S16d oversized photo rejected with 413", tooBig.status);
 step("S16d upload validation: 415 on non-image, 413 over 5 MB");
 
+/* ---- Voice-file evidence: real audio stored and served (Master Task GOAL 16) ---- */
+
+// Minimal valid WebM container header (sent exactly as MediaRecorder emits it).
+const WEBM = Buffer.from("1a45dfa3", "hex");
+const voiceRes = await fetch(`${BASE}/api/evidence`, {
+  method: "POST",
+  headers: { cookie: tb, "x-idempotency-key": "acc-voice-token-1" },
+  body: (() => {
+    const f = new FormData();
+    f.set("task_id", retry.task.id);
+    f.set("reflection", "I tried the think-pair-share again in my second class. After the pair round, almost every student had something to share and two quieter students explained their reasoning aloud.");
+    f.set("checklist", JSON.stringify({}));
+    f.append("voice_file", new Blob([WEBM], { type: "audio/webm" }), "reflection.webm");
+    return f;
+  })(),
+});
+ok(voiceRes.status === 201, "S16e voice-file evidence accepted", voiceRes.status);
+const voiceJson = await voiceRes.json();
+const voiceView = await get(tb, `/api/teacher/evidence/${voiceJson.evidenceId}`);
+ok(Boolean(voiceView.evidence.voiceFile), "S16e voice file stored on the evidence", voiceView.evidence.voiceFile);
+const voicePath = voiceView.evidence.voiceFile.split(/[\\/]/).map(encodeURIComponent).join("/");
+const voiceServe = await fetch(`${BASE}/api/teacher/uploads/${voicePath}`, { headers: { cookie: tb } });
+ok(voiceServe.status === 200 && (voiceServe.headers.get("content-type") || "").includes("audio/webm"),
+  "S16e voice file served as audio/webm", { status: voiceServe.status, type: voiceServe.headers.get("content-type") });
+const mentorVoice = await get(tm, `/api/mentor/evidence/${voiceJson.evidenceId}`);
+ok(Boolean(mentorVoice.evidence?.voiceFile), "S16e mentor review view exposes the voice file", mentorVoice.evidence?.voiceFile);
+step("S16e voice evidence: recorded audio stored, served, visible to mentor");
+
+/* ---- Support request (Master Task GOAL 31) ---- */
+
+const supRes = await fetch(`${BASE}/api/support`, {
+  method: "POST",
+  headers: { cookie: tb, "Content-Type": "application/json" },
+  body: JSON.stringify({ task_id: retry.task.id, reason: "tried_need_help", message: "Participation is still uneven — what next?" }),
+});
+ok(supRes.status === 201, "S16f support request accepted", supRes.status);
+const supList = await get(tm, "/api/mentor/support");
+ok(Array.isArray(supList.requests) && supList.requests.some((r) => r.teacher.id === teacherB.id && /uneven/.test(r.message ?? "")),
+  "S16f mentor sees the support request", supList.requests);
+const supId = supList.requests.find((r) => r.teacher.id === teacherB.id)?.id;
+const ackRes = await fetch(`${BASE}/api/support/${supId}`, { method: "PATCH", headers: { cookie: tm } });
+ok(ackRes.status === 200, "S16f mentor acknowledges the request", ackRes.status);
+const supAfter = await get(tm, "/api/mentor/support");
+ok(!supAfter.requests.some((r) => r.id === supId), "S16f acknowledged request leaves the queue", supAfter.requests);
+const supForbidden = await fetch(`${BASE}/api/support/${supId}`, { method: "PATCH", headers: { cookie: ta } });
+ok(supForbidden.status === 403, "S16f admin cannot acknowledge via mentor endpoint (role check)", supForbidden.status);
+step("S16f support requests: teacher -> mentor queue -> acknowledge, role-enforced");
+
 const dash = await get(tb, "/api/teacher/dashboard");
 ok(dash.adoption?.stage === "retried", "S17 adoption stage", dash.adoption);
 ok(dash.counts?.attempts === 3, "S17 attempts count", dash.counts);
@@ -227,7 +278,6 @@ step("S18 implementation history shows 3 attempts with evidence");
 
 /* ---- Admin analytics ---- */
 
-const ta = await loginCookie("admin@classroomloop.demo", "demo1234");
 const funnel = await get(ta, "/api/analytics/funnel");
 const retried = funnel.funnel?.find((s) => s.stage === "retried")?.count ?? 0;
 ok(retried >= 2, "S19 funnel retried count", funnel.funnel);

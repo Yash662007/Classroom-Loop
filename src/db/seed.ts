@@ -29,7 +29,8 @@ export async function seedDemoData(): Promise<{ users: number; tasks: number; ev
 
   db.transaction(() => {
     db.exec(`
-      DELETE FROM sync_log;
+      DELETE FROM support_requests;
+      DELETE FROM workflow_events;
       DELETE FROM adoption_events;
       DELETE FROM mentor_feedback;
       DELETE FROM ai_analyses;

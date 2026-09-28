@@ -11,6 +11,8 @@ import { draftFeedback } from "./ai/service";
 import { getAnalysisByEvidenceId, getEvidence, getImplementationHistory, getContext } from "./teacher-loop";
 import type { EvidenceRow } from "./teacher-loop";
 import { recordAdoptionEvent, getAdoptionStatus } from "./adoption";
+import { recordWorkflowEvent } from "./workflow";
+import { SUPPORT_REASON_LABELS } from "./support";
 
 export interface AssignedTeacher {
   id: string;
@@ -145,6 +147,41 @@ export interface QueueItem {
   preview: string;
 }
 
+export interface MentorSupportRequest {
+  id: string;
+  teacher: { id: string; name: string };
+  reasonLabel: string;
+  message: string | null;
+  competencyTitle: string | null;
+  createdAt: string;
+}
+
+/** Open "Need help?" requests from this mentor's assigned teachers (GOAL 31/33). */
+export function listMentorSupportRequests(mentorId: string): MentorSupportRequest[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT r.id, r.reason, r.message, r.created_at,
+              u.id AS teacher_id, u.name AS teacher_name, c.title AS competency_title
+       FROM support_requests r
+       JOIN users u ON u.id = r.user_id
+       LEFT JOIN competencies c ON c.id = r.competency_id
+       WHERE u.mentor_id = ? AND r.status = 'open'
+       ORDER BY r.created_at DESC LIMIT 25`
+    )
+    .all(mentorId) as Array<{
+    id: string; reason: string; message: string | null; created_at: string;
+    teacher_id: string; teacher_name: string; competency_title: string | null;
+  }>;
+  return rows.map((r) => ({
+    id: r.id,
+    teacher: { id: r.teacher_id, name: r.teacher_name },
+    reasonLabel: SUPPORT_REASON_LABELS[r.reason as keyof typeof SUPPORT_REASON_LABELS] ?? r.reason,
+    message: r.message,
+    competencyTitle: r.competency_title,
+    createdAt: r.created_at,
+  }));
+}
+
 /** Evidence awaiting mentor review, support-need first. */
 export function getReviewQueue(mentorId: string): QueueItem[] {
   const db = getDb();
@@ -202,6 +239,7 @@ export interface MentorEvidenceView {
     voiceNote: string | null;
     checklist: Record<string, boolean>;
     photoPath: string | null;
+    voiceFile: string | null;
     submittedAt: string;
   };
   analysis: ReturnType<typeof getAnalysisByEvidenceId>;
@@ -251,6 +289,7 @@ export function getMentorEvidenceView(mentorId: string, evidenceId: string): Men
       voiceNote: evidence.voice_note,
       checklist: JSON.parse(evidence.checklist) as Record<string, boolean>,
       photoPath: evidence.photo_path,
+      voiceFile: evidence.voice_file ?? null,
       submittedAt: evidence.submitted_at,
     },
     analysis: getAnalysisByEvidenceId(evidenceId),
@@ -308,8 +347,8 @@ export async function createFeedbackDraft(mentorId: string, evidenceId: string):
   db.prepare(
     `INSERT INTO mentor_feedback (id, evidence_id, mentor_id, draft, status, drafted_by, edited_by_mentor, created_at)
      VALUES (?, ?, ?, ?, 'drafted', ?, 0, ?)`
-  ).run(id, evidenceId, mentorId, draft, "local_engine", new Date().toISOString());
-  return { id, draft, draftedBy: "local_engine" };
+  ).run(id, evidenceId, mentorId, draft, draftResult.source, new Date().toISOString());
+  return { id, draft, draftedBy: draftResult.source };
 }
 
 export interface SendFeedbackInput {
@@ -373,14 +412,33 @@ export function approveAndSendFeedback(input: SendFeedbackInput): SendFeedbackRe
   // Advance adoption + keep evidence/teacher info for the response.
   const meta = db
     .prepare(
-      `SELECT e.user_id, t.competency_id, t.attempt_number, u.name AS teacher_name
+      `SELECT e.user_id, t.competency_id, t.attempt_number, t.id AS task_id, u.name AS teacher_name
        FROM evidence_submissions e
        JOIN implementation_tasks t ON t.id = e.task_id
        JOIN users u ON u.id = e.user_id
        WHERE e.id = ?`
     )
-    .get(input.evidenceId) as { user_id: string; competency_id: string; attempt_number: number; teacher_name: string };
+    .get(input.evidenceId) as { user_id: string; competency_id: string; attempt_number: number; task_id: string; teacher_name: string };
 
+  const mentorName = (db.prepare(`SELECT name FROM users WHERE id = ?`).get(input.mentorId) as { name: string } | undefined)?.name ?? "mentor";
+  recordWorkflowEvent({
+    userId: meta.user_id,
+    competencyId: meta.competency_id,
+    state: "MENTOR_REVIEWED",
+    attemptNumber: meta.attempt_number,
+    taskId: meta.task_id,
+    actor: `mentor:${mentorName}`,
+    detail: "Mentor reviewed the evidence and AI insight",
+  });
+  recordWorkflowEvent({
+    userId: meta.user_id,
+    competencyId: meta.competency_id,
+    state: "FEEDBACK_SENT",
+    attemptNumber: meta.attempt_number,
+    taskId: meta.task_id,
+    actor: `mentor:${mentorName}`,
+    detail: input.edited ? "Mentor edited the AI draft and sent feedback" : "Mentor approved and sent feedback",
+  });
   recordAdoptionEvent(meta.user_id, meta.competency_id, "feedback_received", meta.attempt_number, "Mentor feedback sent");
   return { feedbackId, sentAt, teacherName: meta.teacher_name };
 }

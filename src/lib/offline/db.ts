@@ -40,6 +40,9 @@ export interface OutboxItem {
   };
   photoBlob: Blob | null;
   photoType: string | null;
+  /** Voice-note audio recorded on device (GOAL 16); synced like the photo. */
+  voiceBlob: Blob | null;
+  voiceType: string | null;
   status: OutboxStatus;
   attempts: number;
   lastError: string | null;

@@ -40,7 +40,15 @@ All routes are under `/api`, JSON in/out unless noted, and authenticated by the
 | POST | `/mentor/feedback` | mentor, admin | `{ evidence_id, message, action: "approve_send", edited_by_mentor? }` → sends the mentor's words; advances adoption. |
 | GET | `/mentor/teachers` · `/mentor/teachers/[id]/history` | mentor, admin | Cluster + per-teacher history (read-only). |
 | GET | `/mentor/cluster` | mentor, admin | Aggregate totals + stage distribution. |
-| GET | `/uploads/[...path]` | role-scoped | Teachers: own photos. Mentors: assigned teachers' photos. Path-traversal safe. |
+| GET | `/uploads/[...path]` | role-scoped | Teachers: own files. Mentors: assigned teachers' files. Path-traversal safe. Serves images and voice audio (`audio/webm`, `audio/mp4`, …). |
+| GET | `/teacher/workflow` | teacher | Centralized workflow engine view: current state, full event history, attempts, AI jobs, mentor decisions, adoption per competency. Optional `?competency_id=`. |
+| POST | `/support` | teacher | Structured "Need help?" request (`reason` ∈ 5 plain-language options, optional message). Raises the SUPPORT_REQUIRED workflow branch. |
+| GET | `/mentor/support` | mentor | Open support requests from assigned teachers (most recent first). |
+| PATCH | `/support/[id]` | mentor | Acknowledge a request (ownership-checked; logged under the mentor's name in the event log). |
+
+POST `/evidence` multipart additionally accepts `voice_file` (WebM/MP4/OGG/MP3
+audio ≤ 5 MB) alongside `photo`; recordings are stored like photos and are
+playable in both the teacher insight page and the mentor review page.
 
 ## Admin (aggregate-only)
 

@@ -12,7 +12,7 @@ import { AIInsightCard } from "@/components/ai/AIInsightCard";
 interface ReviewData {
   evidence: {
     id: string; taskId: string; attemptNumber: number; reflection: string;
-    voiceNote: string | null; checklist: Record<string, boolean>; photoPath: string | null; submittedAt: string;
+    voiceNote: string | null; checklist: Record<string, boolean>; photoPath: string | null; voiceFile: string | null; submittedAt: string;
   };
   analysis: {
     observed: string[]; interpretation: string[]; recommendation: string[];
@@ -123,6 +123,13 @@ export default function ReviewPage() {
           <h2 className="label">What the teacher submitted</h2>
           <p className="text-sm text-navy-900/85 whitespace-pre-wrap">{data.evidence.reflection}</p>
           {data.evidence.voiceNote && <p className="text-xs text-navy-900/50 mt-2">Voice transcript attached.</p>}
+          {data.evidence.voiceFile && (
+            <div className="mt-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-navy-900/50 mb-1">Voice reflection</p>
+              {/* eslint-disable-next-line jsx-a11y/media-has-caption -- teacher's own voice memo */}
+              <audio controls src={`/api/mentor/uploads/${data.evidence.voiceFile.split(/[\\/]/).map(encodeURIComponent).join("/")}`} className="w-full max-w-sm" />
+            </div>
+          )}
           {photoSrc && (
             <div className="mt-3">
               {/* eslint-disable-next-line @next/next/no-img-element */}

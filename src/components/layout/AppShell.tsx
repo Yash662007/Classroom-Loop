@@ -10,10 +10,12 @@ import {
   Filter,
   GraduationCap,
   History,
+  Home,
   LayoutDashboard,
   LifeBuoy,
   LogOut,
   Menu,
+  MoreHorizontal,
   Settings,
   Sprout,
   Users,
@@ -222,7 +224,54 @@ export function AppShell({
       <div className="lg:pl-64">
         <Topbar onOpenMenu={() => setMenuOpen(true)} role={role} />
         <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 pb-24">{children}</main>
+        {/* Mobile-first bottom navigation for teachers (Master Task GOAL 19). */}
+        {role === "teacher" && <BottomNav onMore={() => setMenuOpen(true)} />}
       </div>
     </div>
+  );
+}
+
+const BOTTOM_NAV: Array<{ href: string; label: string; icon: LucideIcon }> = [
+  { href: "/teacher", label: "Home", icon: Home },
+  { href: "/teacher/task", label: "Practice", icon: ClipboardList },
+  { href: "/teacher/history", label: "Progress", icon: History },
+];
+
+function BottomNav({ onMore }: { onMore: () => void }) {
+  const pathname = usePathname();
+  return (
+    <nav
+      aria-label="Primary mobile navigation"
+      className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-slate-200"
+      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+    >
+      <div className="grid grid-cols-4">
+        {BOTTOM_NAV.map((l) => {
+          const active = pathname === l.href || (l.href !== "/teacher" && pathname.startsWith(l.href));
+          const Icon = l.icon;
+          return (
+            <Link
+              key={l.href}
+              href={l.href}
+              aria-current={active ? "page" : undefined}
+              className={`flex flex-col items-center justify-center gap-0.5 py-2.5 text-[11px] min-h-[56px] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-600 ${
+                active ? "text-primary-600 font-semibold" : "text-slate-500"
+              }`}
+            >
+              <Icon className="h-5 w-5" aria-hidden />
+              {l.label}
+            </Link>
+          );
+        })}
+        <button
+          type="button"
+          onClick={onMore}
+          className="flex flex-col items-center justify-center gap-0.5 py-2.5 text-[11px] min-h-[56px] text-slate-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-600"
+        >
+          <MoreHorizontal className="h-5 w-5" aria-hidden />
+          More
+        </button>
+      </div>
+    </nav>
   );
 }

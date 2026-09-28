@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/client-api";
 import { STAGE_LABEL } from "@/lib/labels";
@@ -9,6 +9,8 @@ import { ImplementationTimeline } from "@/components/implementation/Implementati
 import type { TimelineEvent } from "@/components/implementation/ImplementationTimeline";
 import { CardSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/States";
+import { useSearchParams } from "next/navigation";
+import { Suspense } from "react";
 
 interface HistoryAttempt {
   attemptNumber: number;
@@ -45,7 +47,8 @@ const JOURNEY = [
   { key: "adopt", label: "Adoption" },
 ];
 
-export default function HistoryPage() {
+function HistoryInner() {
+  const searchParams = useSearchParams();
   const [history, setHistory] = useState<HistoryEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [retrying, setRetrying] = useState<string | null>(null);
@@ -64,6 +67,29 @@ export default function HistoryPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Retry Coach deep-link (GOAL 28): /teacher/history?retry=<competencyId>
+  // starts the coached retry immediately after the history loads.
+  const retryParam = searchParams.get("retry");
+  const autoRetryDone = useRef(false);
+  useEffect(() => {
+    if (retryParam && history && !autoRetryDone.current) {
+      autoRetryDone.current = true;
+      const entry = history.find((h) => h.competency.id === retryParam);
+      const canRetry =
+        entry &&
+        entry.attempts.some((a) => a.evidence.length > 0) &&
+        !entry.attempts.some((a) => a.status !== "completed");
+      if (entry && canRetry) void retry(retryParam);
+      else
+        setRetryMsg(
+          entry && !canRetry
+            ? "This attempt is still in progress or awaiting feedback — finish it before starting another."
+            : null
+        );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [retryParam, history]);
 
   async function retry(competencyId: string) {
     setRetrying(competencyId);
@@ -164,12 +190,16 @@ export default function HistoryPage() {
           adopt: stageIndex >= 6,
         };
         const canRetry = evidenceDone && !h.attempts.some((a) => a.status !== "completed");
+        const isCoachTarget = retryParam === h.competency.id;
 
         return (
-          <div key={h.competency.id} className="card space-y-5">
+          <div key={h.competency.id} className={`card space-y-5 ${isCoachTarget ? "border-blue-300 ring-1 ring-blue-200" : ""}`}>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <h2 className="text-lg font-bold text-navy-900">{h.competency.title}</h2>
+                <h2 className="text-lg font-bold text-navy-900">
+                  {h.competency.title}
+                  {isCoachTarget && <span className="badge-blue ml-2">Retry coach</span>}
+                </h2>
                 <p className="text-xs text-slate-500">
                   Adoption: <span className="font-semibold text-navy-900">{STAGE_LABEL[h.adoptionStage]}</span> · {h.attempts.length} attempt(s)
                 </p>
@@ -220,5 +250,13 @@ export default function HistoryPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function HistoryPage() {
+  return (
+    <Suspense fallback={<CardSkeleton label="Loading your implementation journey…" /> }>
+      <HistoryInner />
+    </Suspense>
   );
 }

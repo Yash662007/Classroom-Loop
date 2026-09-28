@@ -66,6 +66,13 @@ export const feedbackSchema = z.object({
   edited_by_mentor: z.boolean().optional(),
 });
 
+export const supportRequestSchema = z.object({
+  competency_id: z.string().min(1).optional(),
+  task_id: z.string().min(1).optional(),
+  reason: z.enum(["dont_understand", "cant_practise", "tried_need_help", "need_mentor", "something_else"]),
+  message: z.string().trim().max(2000).optional(),
+});
+
 export type LoginInput = z.infer<typeof loginSchema>;
 export type ContextInput = z.infer<typeof contextSchema>;
 export type EvidenceInput = z.infer<typeof evidenceSchema>;

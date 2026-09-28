@@ -23,6 +23,13 @@ body {
   .btn-secondary {
     @apply inline-flex items-center justify-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-navy-900 border border-slate-300 transition-colors hover:bg-softblue-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary-600 disabled:opacity-50 disabled:cursor-not-allowed;
   }
+  .btn-danger {
+    @apply inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:opacity-50;
+  }
+  .badge-blue {
+    @apply inline-flex items-center rounded-full bg-softblue-100 px-2 py-0.5 text-[11px] font-semibold text-primary-600 border border-softblue-300;
+  }
+
   .btn-teal {
     @apply inline-flex items-center justify-center gap-2 rounded-lg bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-teal-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-teal-600 disabled:opacity-50 disabled:cursor-not-allowed;
   }

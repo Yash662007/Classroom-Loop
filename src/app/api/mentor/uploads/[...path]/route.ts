@@ -10,6 +10,10 @@ const MIME: Record<string, string> = {
   png: "image/png",
   webp: "image/webp",
   heic: "image/heic",
+  webm: "audio/webm",
+  m4a: "audio/mp4",
+  ogg: "audio/ogg",
+  mp3: "audio/mpeg",
 };
 
 export async function GET(req: Request, ctx: { params: Promise<{ path: string[] }> }) {

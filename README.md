@@ -1,4 +1,4 @@
-# Classroom Loop
+help# Classroom Loop
 
 AI teacher-coaching platform MVP. One loop, fully persisted:
 training → competency check → personalized task → practice scenario →

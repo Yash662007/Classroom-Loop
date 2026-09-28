@@ -8,6 +8,10 @@ import type { EvidenceDraft } from "@/lib/offline/db";
 import { useSync } from "@/components/SyncProvider";
 import { CardSkeleton } from "@/components/ui/Skeleton";
 import { ErrorState } from "@/components/ui/States";
+import { VoiceRecorder } from "@/components/evidence/VoiceRecorder";
+import { PhotoCapture } from "@/components/evidence/PhotoCapture";
+import { QualityCheck } from "@/components/evidence/QualityCheck";
+import { NeedHelpButton } from "@/components/evidence/NeedHelpButton";
 
 interface TaskView {
   id: string;
@@ -43,6 +47,7 @@ export default function TaskPage() {
   const [reflection, setReflection] = useState("");
   const [voiceText, setVoiceText] = useState("");
   const [photo, setPhoto] = useState<File | null>(null);
+  const [voiceFile, setVoiceFile] = useState<File | null>(null); // recorded audio (GOAL 16)
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState<{ evidenceId: string; duplicate: boolean } | null>(null);
@@ -53,7 +58,6 @@ export default function TaskPage() {
   const [practiceBusy, setPracticeBusy] = useState(false);
   const [practiceDone, setPracticeDone] = useState<{ wasCorrect: boolean; recommendedChoice: number } | null>(null);
 
-  const [listening, setListening] = useState(false);
   const [queuedOffline, setQueuedOffline] = useState(false);
   const [photoMeta, setPhotoMeta] = useState<{ name: string; size: number } | null>(null);
   const { syncNow } = useSync();
@@ -233,6 +237,7 @@ export default function TaskPage() {
       const key = idempotencyKey(`evidence-${task.id}`);
       form.set("client_token", key);
       if (photo) form.set("photo", photo);
+      if (voiceFile) form.set("voice_file", voiceFile);
 
       const r = await apiFetch<{ evidenceId: string; duplicate: boolean }>("/api/evidence", {
         method: "POST",
@@ -260,6 +265,8 @@ export default function TaskPage() {
           },
           photoBlob: photo,
           photoType: photo?.type ?? null,
+          voiceBlob: voiceFile,
+          voiceType: voiceFile?.type ?? null,
           status: "queued",
           attempts: 0,
           lastError: null,
@@ -276,39 +283,6 @@ export default function TaskPage() {
     } finally {
       setSubmitting(false);
     }
-  }
-
-  function startVoice() {
-    const w = window as unknown as { SpeechRecognition?: new () => SpeechRecognitionLike; webkitSpeechRecognition?: new () => SpeechRecognitionLike };
-    const SR = w.SpeechRecognition ?? w.webkitSpeechRecognition;
-    if (!SR) {
-      setVoiceText("");
-      setSubmitError("Voice input isn't supported in this browser — please type your reflection instead.");
-      return;
-    }
-    const rec = new SR();
-    rec.lang = "en-IN";
-    rec.interimResults = false;
-    rec.maxAlternatives = 1;
-    rec.onresult = (e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => {
-      let text = "";
-      for (let i = 0; i < e.results.length; i++) text += e.results[i][0].transcript + " ";
-      setVoiceText((prev) => (prev ? prev + " " : "") + text.trim());
-    };
-    rec.onend = () => setListening(false);
-    rec.onerror = () => setListening(false);
-    setListening(true);
-    rec.start();
-  }
-
-  interface SpeechRecognitionLike {
-    lang: string;
-    interimResults: boolean;
-    maxAlternatives: number;
-    onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
-    onend: (() => void) | null;
-    onerror: (() => void) | null;
-    start: () => void;
   }
 
   if (loading) return <CardSkeleton label="Loading your task…" />;
@@ -425,14 +399,8 @@ export default function TaskPage() {
             </div>
 
             <div>
-              <label className="label" htmlFor="voice">Voice reflection (optional)</label>
-              <div className="flex items-center gap-2">
-                <button type="button" className="btn-secondary" onClick={startVoice} disabled={listening}>
-                  {listening ? "Listening… (speak now)" : "🎙 Dictate reflection"}
-                </button>
-                {voiceText && <button type="button" className="text-xs text-red-600 underline" onClick={() => setVoiceText("")}>clear</button>}
-              </div>
-              {voiceText && <p className="mt-2 text-sm bg-softblue-100 rounded-lg px-3 py-2 text-navy-900/80">{voiceText}</p>}
+              <label className="label">Voice reflection (optional — records audio your mentor can play)</label>
+              <VoiceRecorder onSaved={setVoiceFile} />
             </div>
 
             <fieldset>
@@ -454,15 +422,11 @@ export default function TaskPage() {
             </fieldset>
 
             <div>
-              <label className="label" htmlFor="photo">Photo of student work (optional · JPEG/PNG/WebP · ≤5 MB · no student faces or names)</label>
-              <input
-                id="photo"
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                className="text-sm"
-                onChange={(e) => setPhoto(e.target.files?.[0] ?? null)}
-              />
+              <label className="label">Photo of student work (optional · compressed automatically · no student faces or names)</label>
+              <PhotoCapture onFile={setPhoto} />
             </div>
+
+            <QualityCheck reflection={reflection} checklistCount={Object.values(checklist).filter(Boolean).length} />
 
             {submitError && <div role="alert" className="rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2.5">{submitError}</div>}
 
@@ -475,6 +439,10 @@ export default function TaskPage() {
       </div>
 
       <MicroLearning microLearning={task.micro_learning} />
+
+      <div className="card">
+        <NeedHelpButton taskId={task.id} />
+      </div>
     </div>
   );
 }

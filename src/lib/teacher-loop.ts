@@ -17,6 +17,7 @@ import type {
   AiSource,
 } from "./ai/types";
 import { recordAdoptionEvent, getAdoptionStatus, qualifiesForSustained } from "./adoption";
+import { recordWorkflowEvent, deriveWorkflowState } from "./workflow";
 import { ADOPTION_STAGES } from "@/db/schema";
 import type { AdoptionStage } from "@/db/schema";
 
@@ -53,6 +54,7 @@ export interface EvidenceRow {
   voice_note: string | null;
   checklist: string;
   photo_path: string | null;
+  voice_file: string | null;
   status: "submitted" | "analyzed";
   client_token: string | null;
   submitted_at: string;
@@ -90,6 +92,13 @@ export async function upsertContext(userId: string, data: TeacherContextData): P
     data.confidence,
     new Date().toISOString()
   );
+
+  recordWorkflowEvent({
+    userId,
+    competencyId: "",
+    state: "CONTEXT_READY",
+    detail: "Teaching context saved",
+  });
 }
 
 export function getContext(userId: string): TeacherContextData | null {
@@ -192,7 +201,17 @@ export function completeModule(userId: string, moduleId: string): { completed: n
       )
       .get(userId, module.competency_id) as { n: number }
   ).n;
-  return { completed, total: module.total, trainingComplete: module.total > 0 && completed >= module.total };
+  const trainingComplete = module.total > 0 && completed >= module.total;
+  if (trainingComplete) {
+    // Idempotent: recording repeats is a no-op thanks to the unique event index.
+    recordWorkflowEvent({
+      userId,
+      competencyId: module.competency_id,
+      state: "TRAINING_COMPLETE",
+      detail: `Completed ${completed}/${module.total} training modules`,
+    });
+  }
+  return { completed, total: module.total, trainingComplete };
 }
 
 export function submitCompetencyCheck(
@@ -217,6 +236,13 @@ export function submitCompetencyCheck(
     `INSERT INTO competency_results (id, user_id, competency_id, status, score, answers, checked_at)
      VALUES (?, ?, ?, ?, ?, ?, ?)`
   ).run(randomUUID(), userId, competencyId, status, score, JSON.stringify({ items: answers, total }), new Date().toISOString());
+
+  recordWorkflowEvent({
+    userId,
+    competencyId,
+    state: status === "passed" ? "TRAINING_COMPLETE" : "SUPPORT_REQUIRED",
+    detail: `Competency check scored ${score}/${total} (${status})`,
+  });
 
   return { status, score, total };
 }
@@ -337,6 +363,14 @@ export async function generateTask(
   );
 
   const task = db.prepare(`SELECT * FROM implementation_tasks WHERE id = ?`).get(id) as TaskRow;
+  recordWorkflowEvent({
+    userId,
+    competencyId,
+    state: "ACTION_ASSIGNED",
+    attemptNumber: task.attempt_number,
+    taskId: task.id,
+    detail: `Attempt ${task.attempt_number} personalized (${personalization.source})`,
+  });
   return { task, aiSource: personalization.source, reusedExisting: false };
 }
 
@@ -378,6 +412,14 @@ export function savePracticeSession(
     db.prepare(`UPDATE implementation_tasks SET status = 'practised' WHERE id = ?`).run(taskId);
   }
   recordAdoptionEvent(userId, task.competency_id, "practised", task.attempt_number, "Practice scenario completed");
+  recordWorkflowEvent({
+    userId,
+    competencyId: task.competency_id,
+    state: "PRACTICE_COMPLETE",
+    attemptNumber: task.attempt_number,
+    taskId: task.id,
+    detail: wasCorrect ? "Practice response matched the recommended choice" : "Practice completed with an alternative choice",
+  });
 
   return { wasCorrect, recommendedChoice: recommended ?? -1 };
 }
@@ -401,6 +443,8 @@ export interface SubmitEvidenceInput {
   voiceNote: string | null;
   checklist: Record<string, boolean>;
   photoPath: string | null;
+  /** Stored audio recording of the voice reflection (GOAL 16). */
+  voiceFilePath?: string | null;
   clientToken: string | null;
 }
 
@@ -445,8 +489,8 @@ export async function submitEvidence(input: SubmitEvidenceInput): Promise<Submit
   // can be regenerated later. The AI is never allowed to destroy user data.
   const id = randomUUID();
   db.prepare(
-    `INSERT INTO evidence_submissions (id, user_id, task_id, attempt_number, reflection, voice_note, checklist, photo_path, status, client_token, submitted_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'submitted', ?, ?)`
+    `INSERT INTO evidence_submissions (id, user_id, task_id, attempt_number, reflection, voice_note, checklist, photo_path, voice_file, status, client_token, submitted_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted', ?, ?)`
   ).run(
     id,
     input.userId,
@@ -456,9 +500,23 @@ export async function submitEvidence(input: SubmitEvidenceInput): Promise<Submit
     input.voiceNote,
     JSON.stringify(input.checklist),
     input.photoPath,
+    input.voiceFilePath ?? null,
     input.clientToken,
     new Date().toISOString()
   );
+
+  // Offline sync states (GOAL 2): the client queued while offline; the server
+  // observes the resolution and records it in the pipeline history.
+  if (input.clientToken) {
+    recordWorkflowEvent({
+      userId: input.userId,
+      competencyId: task.competency_id,
+      state: "SYNC_PENDING",
+      attemptNumber: task.attempt_number,
+      taskId: task.id,
+      detail: "Submission was queued offline and synced now",
+    });
+  }
 
   const comp = getCompetency(task.competency_id);
   const keywords = Object.fromEntries(comp.criteria.map((c) => [c.label, c.keywords]));
@@ -471,6 +529,14 @@ export async function submitEvidence(input: SubmitEvidenceInput): Promise<Submit
     context: getContext(input.userId),
     history: getHistorySummary(input.userId, task.competency_id),
   };
+  recordWorkflowEvent({
+    userId: input.userId,
+    competencyId: task.competency_id,
+    state: "AI_ANALYSIS_PENDING",
+    attemptNumber: task.attempt_number,
+    taskId: task.id,
+    detail: "Evidence analysis started",
+  });
   const ai = await analyzeEvidence(analysisInput).catch((err: unknown) => {
     console.error("[ai] evidence analysis failed; evidence kept for retry:", err instanceof Error ? err.message : err);
     return null;
@@ -504,11 +570,66 @@ export async function submitEvidence(input: SubmitEvidenceInput): Promise<Submit
     `UPDATE implementation_tasks SET status = 'completed' WHERE id = ? AND status IN ('assigned','practised','attempted')`
   ).run(input.taskId);
 
+  recordWorkflowEvent({
+    userId: input.userId,
+    competencyId: task.competency_id,
+    state: "EVIDENCE_SUBMITTED",
+    attemptNumber: task.attempt_number,
+    taskId: task.id,
+    detail: input.clientToken ? "Evidence received via offline sync" : "Evidence submitted",
+  });
+
+  if (ai) {
+    recordWorkflowEvent({
+      userId: input.userId,
+      competencyId: task.competency_id,
+      state: "AI_ANALYSIS_COMPLETE",
+      attemptNumber: task.attempt_number,
+      taskId: task.id,
+      detail: `Analysis generated (${ai.source})`,
+    });
+    if (ai.result.supportRecommended) {
+      recordWorkflowEvent({
+        userId: input.userId,
+        competencyId: task.competency_id,
+        state: "SUPPORT_REQUIRED",
+        attemptNumber: task.attempt_number,
+        taskId: task.id,
+        detail: "AI detected support signals in the evidence",
+      });
+    }
+    recordWorkflowEvent({
+      userId: input.userId,
+      competencyId: task.competency_id,
+      state: "MENTOR_REVIEW_PENDING",
+      attemptNumber: task.attempt_number,
+      taskId: task.id,
+      actor: "system:analysis pipeline",
+      detail: "Evidence is ready for mentor review",
+    });
+  }
+
   recordAdoptionEvent(input.userId, task.competency_id, "attempted", task.attempt_number, "Applied technique in classroom");
   recordAdoptionEvent(input.userId, task.competency_id, "evidence_submitted", task.attempt_number, "Evidence submitted");
 
   if (qualifiesForSustained(input.userId, task.competency_id)) {
     recordAdoptionEvent(input.userId, task.competency_id, "sustained", task.attempt_number, "3+ attempts with evidence and sent feedback");
+    recordWorkflowEvent({
+      userId: input.userId,
+      competencyId: task.competency_id,
+      state: "REPEATED_IMPLEMENTATION",
+      attemptNumber: task.attempt_number,
+      taskId: task.id,
+      detail: "Multiple complete attempts with evidence recorded",
+    });
+    recordWorkflowEvent({
+      userId: input.userId,
+      competencyId: task.competency_id,
+      state: "SUSTAINED_ADOPTION",
+      attemptNumber: task.attempt_number,
+      taskId: task.id,
+      detail: "3+ complete attempts with evidence and sent feedback",
+    });
   }
 
   const analysis = getAnalysisByEvidenceId(id);
@@ -566,6 +687,24 @@ export async function regenerateAnalysis(evidenceId: string) {
     new Date().toISOString()
   );
   db.prepare(`UPDATE evidence_submissions SET status = 'analyzed' WHERE id = ?`).run(evidenceId);
+
+  const selfHealed = db
+    .prepare(
+      `SELECT e.user_id, t.competency_id, t.attempt_number, t.id AS task_id FROM evidence_submissions e
+       JOIN implementation_tasks t ON t.id = e.task_id WHERE e.id = ?`
+    )
+    .get(evidenceId) as { user_id: string; competency_id: string; attempt_number: number; task_id: string } | undefined;
+  if (selfHealed) {
+    recordWorkflowEvent({
+      userId: selfHealed.user_id,
+      competencyId: selfHealed.competency_id,
+      state: "AI_ANALYSIS_COMPLETE",
+      attemptNumber: selfHealed.attempt_number,
+      taskId: selfHealed.task_id,
+      actor: "system:analysis regeneration",
+      detail: "Analysis self-healed on duplicate replay after a prior AI failure",
+    });
+  }
   return getAnalysisByEvidenceId(evidenceId);
 }
 
@@ -586,6 +725,7 @@ export function getAnalysisByEvidenceId(evidenceId: string) {
     generatedAt: String(row.generated_at),
   };
 }
+
 
 export function getEvidence(userId: string, evidenceId: string): { evidence: EvidenceRow; analysis: ReturnType<typeof getAnalysisByEvidenceId> } {
   const db = getDb();
@@ -629,19 +769,34 @@ export async function startRetry(userId: string, competencyId: string, note?: st
     )
     .get(userId, competencyId) as { n: number };
 
-  const generated = await generateTask(userId, competencyId, { forceNew: true });
-  if (feedbackReceived.n === 0) {
+  const generated = await generateTask(userId, competencyId, { forceNew: true });  if (feedbackReceived.n === 0) {
     // Retry without mentor feedback is allowed but flagged in the reasoning trail.
     db.prepare(`UPDATE implementation_tasks SET reasoning = ? WHERE id = ?`).run(
       `${generated.task.reasoning ?? ""} | Note: retry started before any mentor feedback was sent.${note ? ` Teacher note: ${note}` : ""}`,
       generated.task.id
     );
+    recordWorkflowEvent({
+      userId,
+      competencyId,
+      state: "RETRY_REQUIRED",
+      attemptNumber: generated.task.attempt_number,
+      taskId: generated.task.id,
+      detail: "Retry started before any mentor feedback was sent",
+    });
   } else if (note) {
     db.prepare(`UPDATE implementation_tasks SET reasoning = ? WHERE id = ?`).run(
       `${generated.task.reasoning ?? ""} | Retry note: ${note}`,
       generated.task.id
     );
   }
+  recordWorkflowEvent({
+    userId,
+    competencyId,
+    state: "RETRY_IN_PROGRESS",
+    attemptNumber: generated.task.attempt_number,
+    taskId: generated.task.id,
+    detail: note ? `Retry started: ${note}` : "Retry started after feedback",
+  });
   recordAdoptionEvent(userId, competencyId, "retried", generated.task.attempt_number, note ?? "New attempt after feedback");
   // Re-read: the reasoning update above ran after generateTask snapshotted the row.
   const task = db.prepare(`SELECT * FROM implementation_tasks WHERE id = ?`).get(generated.task.id) as TaskRow;
@@ -657,6 +812,45 @@ export interface LoopStepView {
   label: string;
   state: "done" | "current" | "upcoming" | "attention";
   detail?: string;
+}
+
+export function deriveWorkflowForUser(userId: string, competencyId?: string) {
+  const db = getDb();
+  const comps = competencyId
+    ? [{ competency_id: competencyId }]
+    : (db.prepare(`SELECT DISTINCT competency_id FROM implementation_tasks WHERE user_id = ?`).all(userId) as Array<{ competency_id: string }>);
+  return comps.map((c) => {
+    const w = deriveWorkflowState(userId, c.competency_id);
+    // Seeded journeys predate the event log; derive a representative state
+    // from real records so the engine still answers "where am I?" for them.
+    const representative = w.events.length
+      ? null
+      : w.adoptionStage === "sustained"
+        ? "SUSTAINED_ADOPTION"
+        : w.adoptionStage === "repeated"
+          ? "REPEATED_IMPLEMENTATION"
+          : w.adoptionStage === "retried"
+            ? "RETRY_IN_PROGRESS"
+            : w.adoptionStage === "feedback_received"
+              ? "FEEDBACK_SENT"
+              : w.adoptionStage === "evidence_submitted"
+                ? "EVIDENCE_SUBMITTED"
+                : w.adoptionStage === "attempted"
+                  ? "CLASSROOM_ATTEMPT_RECORDED"
+                  : w.adoptionStage === "practised"
+                    ? "PRACTICE_COMPLETE"
+                    : null;
+    return {
+      competencyId: c.competency_id,
+      currentState: w.currentState,
+      representativeState: representative,
+      adoptionStage: w.adoptionStage,
+      support: w.support,
+      events: w.events,
+      attempts: w.attempts,
+      eventCount: w.events.length,
+    };
+  });
 }
 
 export function getTeacherDashboard(userId: string) {

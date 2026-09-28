@@ -6,6 +6,14 @@ import path from "node:path";
 
 import { getDb, resetDbForTests } from "@/db/instance";
 import {
+  WORKFLOW_STATES,
+  deriveWorkflowState,
+  getLatestWorkflowState,
+  recordWorkflowEvent,
+} from "@/lib/workflow";
+import { acknowledgeSupportRequest, createSupportRequest } from "@/lib/support";
+import { listMentorSupportRequests } from "@/lib/mentor-loop";
+import {
   ADOPTION_RULES,
   getAdoptionStatus,
   qualifiesForSustained,
@@ -19,7 +27,10 @@ import {
   completeModule,
   generateTask,
   listCompetenciesWithStatus,
+  savePracticeSession,
+  startRetry,
   submitCompetencyCheck,
+  submitEvidence,
   upsertContext,
 } from "@/lib/teacher-loop";
 
@@ -351,5 +362,234 @@ describe("generateTask guard rails", () => {
     const forced = await generateTask(TEACHER, "comp-task", { forceNew: true });
     expect(forced.reusedExisting).toBe(false);
     expect(forced.task.attempt_number).toBe(2);
+  });
+});
+
+/* ---------------- Centralized workflow engine ---------------- */
+
+describe("workflow engine (centralized pipeline state)", () => {
+  it("defines all 23 required pipeline states", () => {
+    expect([...WORKFLOW_STATES]).toEqual([
+      "NOT_STARTED", "TRAINING_COMPLETE", "CONTEXT_READY", "ACTION_ASSIGNED",
+      "PRACTICE_PENDING", "PRACTICE_COMPLETE", "CLASSROOM_ATTEMPT_PENDING",
+      "CLASSROOM_ATTEMPT_RECORDED", "EVIDENCE_PENDING", "EVIDENCE_SUBMITTED",
+      "AI_ANALYSIS_PENDING", "AI_ANALYSIS_COMPLETE", "MENTOR_REVIEW_PENDING",
+      "MENTOR_REVIEWED", "FEEDBACK_SENT", "RETRY_REQUIRED", "RETRY_IN_PROGRESS",
+      "RETRY_COMPLETED", "REPEATED_IMPLEMENTATION", "SUSTAINED_ADOPTION",
+      "SUPPORT_REQUIRED", "SYNC_PENDING", "SYNC_FAILED",
+    ]);
+  });
+
+  it("stores what/when/who + current and previous state for every event", async () => {
+    createUser("t-wf1", "teacher");
+    createCompetency("comp-wf1", ["c1"]);
+
+    await upsertContext("t-wf1", {
+      experience_years: 2, grades_taught: [1], subjects: ["Math"], class_size: 30,
+      multigrade: false, school_context: null, challenges: [], confidence: 3,
+    });
+    submitCompetencyCheck("t-wf1", "comp-wf1", { c1: 2 });
+    await generateTask("t-wf1", "comp-wf1");
+
+    const w = deriveWorkflowState("t-wf1", "comp-wf1");
+    expect(w.currentState).toBe("ACTION_ASSIGNED");
+    expect(w.events.map((e) => e.state)).toEqual([
+      "CONTEXT_READY", "TRAINING_COMPLETE", "ACTION_ASSIGNED",
+    ]);
+    // Every event carries the four required dimensions.
+    for (const e of w.events) {
+      expect(e.occurredAt).toBeTruthy();
+      expect(e.actor).toBeTruthy();
+      expect(e.previousState).toBeDefined();
+    }
+    expect(w.events[1].previousState).toBe("CONTEXT_READY");
+    expect(w.events[1].actor).toMatch(/^teacher:/); // who caused it
+    expect(w.events[2].attemptNumber).toBe(1);
+    expect(w.events[2].taskId).toBe(w.attempts[0].taskId); // attempt linkage
+  });
+
+  it("records branching: low check score raises SUPPORT_REQUIRED", () => {
+    createUser("t-wf2", "teacher");
+    createCompetency("comp-wf2", ["c1", "c2"]);
+    submitCompetencyCheck("t-wf2", "comp-wf2", { c1: 0, c2: 0 }); // 0% -> needs_review
+
+    expect(getLatestWorkflowState("t-wf2", "comp-wf2")).toBe("SUPPORT_REQUIRED");
+  });
+
+  it("records branching: analysis support signals raise SUPPORT_REQUIRED before mentor review", () => {
+    createUser("m-wf3", "mentor");
+    createUser("t-wf3", "teacher");
+    createCompetency("comp-wf3", ["c1"]);
+    const { taskId, evidenceId } = seedAttemptCycle("t-wf3", "comp-wf3", 1, "m-wf3");
+    // The support branch derives from the analysis row, so the flagged analysis
+    // must exist before the engine can record the branch.
+    getDb()
+      .prepare(
+        `INSERT INTO ai_analyses (id, evidence_id, observed, interpretation, recommendation, criterion_hits, support_flags, support_recommended, generated_by, generated_at)
+         VALUES (?, ?, '[]', '[]', '[]', '[]', '[{"signal":"s","detail":"d","severity":"watch"}]', 1, 'local_engine', ?)`
+      )
+      .run(randomUUID(), evidenceId, new Date().toISOString());
+    recordWorkflowEvent({
+      userId: "t-wf3",
+      competencyId: "comp-wf3",
+      state: "SUPPORT_REQUIRED",
+      attemptNumber: 1,
+      taskId,
+      actor: "system:analysis pipeline",
+      detail: "AI detected support signals in the evidence",
+    });
+    const w = deriveWorkflowState("t-wf3", "comp-wf3");
+    expect(w.events.some((e) => e.state === "SUPPORT_REQUIRED")).toBe(true);
+    expect(w.support?.required).toBe(true); // derived from the flagged analysis row
+  });
+
+  it("survives interrupted requests: recording the same transition twice is idempotent", () => {
+    createUser("t-wf4", "teacher");
+    createCompetency("comp-wf4", ["c1"]);
+    const input = {
+      userId: "t-wf4",
+      competencyId: "comp-wf4",
+      state: "EVIDENCE_SUBMITTED" as const,
+      attemptNumber: 1,
+      taskId: "task-1",
+    };
+    recordWorkflowEvent(input);
+    recordWorkflowEvent(input); // replayed offline sync / retried request
+    recordWorkflowEvent({ ...input, occurredAt: "2020-01-01T00:00:00.000Z" }); // different timestamp
+    const w = deriveWorkflowState("t-wf4", "comp-wf4");
+    expect(w.events).toHaveLength(1); // unique index dedupes
+    expect(w.currentState).toBe("EVIDENCE_SUBMITTED");
+  });
+
+  it("supports retry loops without deleting previous attempts", async () => {
+    createUser("m-wf5", "mentor");
+    createUser("t-wf5", "teacher", "m-wf5");
+    createCompetency("comp-wf5", ["c1"]);
+    await upsertContext("t-wf5", {
+      experience_years: 5, grades_taught: [5], subjects: ["Art"], class_size: 25,
+      multigrade: true, school_context: null, challenges: [], confidence: 2,
+    });
+    submitCompetencyCheck("t-wf5", "comp-wf5", { c1: 2 });
+
+    // Attempt 1: real task -> practice -> evidence -> local AI analysis.
+    const first = await generateTask("t-wf5", "comp-wf5");
+    savePracticeSession("t-wf5", first.task.id, first.task.recommended_choice ?? 0);
+    const ev1 = await submitEvidence({
+      userId: "t-wf5",
+      taskId: first.task.id,
+      reflection: "I tried asking open questions and gave students thinking time.",
+      voiceNote: null,
+      checklist: {},
+      photoPath: null,
+      clientToken: null,
+    });
+    expect(ev1.duplicate).toBe(false);
+    expect(ev1.analysis).not.toBeNull();
+
+    // Mentor decision recorded as sent (human step of attempt 1).
+    const now = new Date().toISOString();
+    getDb()
+      .prepare(
+        `INSERT INTO mentor_feedback (id, evidence_id, mentor_id, draft, sent_message, status, drafted_by, edited_by_mentor, created_at, sent_at)
+         VALUES (?, ?, 'm-wf5', 'd', 'sent', 'sent', 'local_engine', 0, ?, ?)`
+      )
+      .run(randomUUID(), ev1.evidenceId, now, now);
+
+    // Attempt 2 (retry): previous attempt must remain intact.
+    const retry = await startRetry("t-wf5", "comp-wf5");
+    expect(retry.task.attempt_number).toBe(2);
+    const ev2 = await submitEvidence({
+      userId: "t-wf5",
+      taskId: retry.task.id,
+      reflection: "Second attempt: I paired students before whole-class discussion.",
+      voiceNote: null,
+      checklist: {},
+      photoPath: null,
+      clientToken: null,
+    });
+    expect(ev2.duplicate).toBe(false);
+
+    const w = deriveWorkflowState("t-wf5", "comp-wf5");
+    expect(w.attempts).toHaveLength(2); // history preserved, never overwritten
+    expect(w.attempts[0].evidence).toHaveLength(1);
+    expect(w.attempts[0].evidence[0].feedback?.status).toBe("sent");
+    expect(w.attempts[1].evidence).toHaveLength(1);
+
+    const states = w.events.map((e) => e.state);
+    for (const s of [
+      "CONTEXT_READY", "TRAINING_COMPLETE", "ACTION_ASSIGNED", "PRACTICE_COMPLETE",
+      "EVIDENCE_SUBMITTED", "AI_ANALYSIS_COMPLETE", "MENTOR_REVIEW_PENDING", "RETRY_IN_PROGRESS",
+    ]) {
+      expect(states).toContain(s);
+    }
+    // The retry event belongs to attempt 2; attempt-1 events keep their linkage.
+    const retryEvent = w.events.find((e) => e.state === "RETRY_IN_PROGRESS");
+    expect(retryEvent?.attemptNumber).toBe(2);
+    expect(w.events.filter((e) => e.state === "EVIDENCE_SUBMITTED")).toHaveLength(2);
+    // Attempt 2's evidence was analyzed last, so the pipeline is awaiting review.
+    expect(w.currentState).toBe("MENTOR_REVIEW_PENDING");
+  });
+
+  it("derives AI jobs, mentor decisions and adoption alongside the event log", async () => {
+    createUser("m-wf6", "mentor");
+    createUser("t-wf6", "teacher", "m-wf6");
+    createCompetency("comp-wf6", ["c1"]);
+    const { evidenceId } = seedAttemptCycle("t-wf6", "comp-wf6", 1, "m-wf6");
+    // Mirror the mentor-send adoption step the real approveAndSendFeedback performs.
+    recordAdoptionEvent("t-wf6", "comp-wf6", "feedback_received", 1);
+    getDb()
+      .prepare(
+        `INSERT INTO ai_analyses (id, evidence_id, observed, interpretation, recommendation, criterion_hits, support_flags, support_recommended, generated_by, generated_at)
+         VALUES (?, ?, '[]', '[]', '[]', '[]', '[{"signal":"s","detail":"d","severity":"watch"}]', 0, 'local_engine', ?)`
+      )
+      .run(randomUUID(), evidenceId, new Date().toISOString());
+
+    const w = deriveWorkflowState("t-wf6", "comp-wf6");
+    expect(w.attempts[0].evidence[0].analysis?.source).toBe("local_engine"); // AI job connected
+    expect(w.attempts[0].evidence[0].feedback?.status).toBe("sent"); // mentor decision connected
+    expect(w.adoptionStage).toBe("feedback_received"); // adoption connected
+  });
+
+  it("raises SUPPORT_REQUIRED when a teacher asks for help, and records mentor acknowledgement", () => {
+    createUser("m-s1", "mentor");
+    createUser("t-s1", "teacher", "m-s1");
+    createCompetency("comp-s1", ["c1"]);
+
+    const created = createSupportRequest({
+      userId: "t-s1",
+      competencyId: "comp-s1",
+      reason: "tried_need_help",
+      message: "Students stayed quiet — what am I doing wrong?",
+    });
+    expect(created.id).toBeTruthy();
+
+    // Workflow branch recorded with the teacher as the actor.
+    const w = deriveWorkflowState("t-s1", "comp-s1");
+    const supportEvents = w.events.filter((e) => e.state === "SUPPORT_REQUIRED");
+    expect(supportEvents).toHaveLength(1);
+    expect(supportEvents[0].actor).toMatch(/^teacher:/);
+    expect(supportEvents[0].detail).toMatch(/tried it in class/i);
+
+    // Mentor sees the request and the acknowledgement is logged under their name.
+    const queue = listMentorSupportRequests("m-s1");
+    expect(queue).toHaveLength(1);
+    expect(queue[0].teacher.id).toBe("t-s1");
+    expect(queue[0].reasonLabel).toMatch(/need help/i);
+
+    acknowledgeSupportRequest("m-s1", created.id);
+    expect(listMentorSupportRequests("m-s1")).toHaveLength(0); // no longer open
+    const w2 = deriveWorkflowState("t-s1", "comp-s1");
+    const ack = w2.events.at(-1);
+    expect(ack?.actor).toBe("mentor:User m-s1");
+    expect(ack?.detail).toMatch(/acknowledged/i);
+  });
+
+  it("a mentor cannot acknowledge a support request for a teacher not assigned to them", () => {
+    createUser("m-s2", "mentor");
+    createUser("m-s3", "mentor");
+    createUser("t-s2", "teacher", "m-s2");
+    const created = createSupportRequest({ userId: "t-s2", reason: "need_mentor" });
+    expect(() => acknowledgeSupportRequest("m-s3", created.id)).toThrow(ApiError);
+    expect(() => acknowledgeSupportRequest("m-s3", created.id)).toThrow(/not assigned/);
   });
 });

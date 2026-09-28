@@ -43,6 +43,9 @@ export async function flushOutbox(): Promise<FlushOutcome> {
       if (item.photoBlob && item.photoType) {
         form.set("photo", item.photoBlob, `evidence.${item.photoType.split("/")[1] ?? "jpg"}`);
       }
+      if (item.voiceBlob && item.voiceType) {
+        form.set("voice_file", item.voiceBlob, `voice.${item.voiceType.split("/")[1] ?? "webm"}`);
+      }
 
       const res = await fetch("/api/evidence", {
         method: "POST",

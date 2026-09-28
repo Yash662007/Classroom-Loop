@@ -152,6 +152,7 @@ export function createSchema(db: BetterSqlite3.Database): void {
       voice_note TEXT,
       checklist TEXT NOT NULL DEFAULT '{}',
       photo_path TEXT,
+      voice_file TEXT,
       status TEXT NOT NULL DEFAULT 'submitted' CHECK (status IN ('submitted', 'analyzed')),
       client_token TEXT UNIQUE,
       submitted_at TEXT NOT NULL
@@ -193,6 +194,39 @@ export function createSchema(db: BetterSqlite3.Database): void {
       occurred_at TEXT NOT NULL
     );
 
+    -- Teacher support requests (Master Task GOAL 31): a structured "Need help?"
+    -- signal raised by the teacher; consumed by mentor priority views and the
+    -- workflow engine (SUPPORT_REQUIRED branch).
+    CREATE TABLE IF NOT EXISTS support_requests (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id),
+      competency_id TEXT,
+      task_id TEXT,
+      reason TEXT NOT NULL CHECK (reason IN ('dont_understand', 'cant_practise', 'tried_need_help', 'need_mentor', 'something_else')),
+      message TEXT,
+      status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'acknowledged')),
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_support_user ON support_requests(user_id, status);
+
+    -- Centralized workflow event log (GOAL 2): append-only, idempotent.
+    -- what happened (state) + when (occurred_at) + who/what caused it (actor)
+    -- + resulting and previous state. See src/lib/workflow.ts.
+    CREATE TABLE IF NOT EXISTS workflow_events (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id),
+      -- No FK on competency_id: the log is append-only audit data and some
+      -- events (e.g. CONTEXT_READY) legitimately span all competencies.
+      competency_id TEXT NOT NULL,
+      attempt_number INTEGER NOT NULL DEFAULT 0,
+      task_id TEXT NOT NULL DEFAULT '',
+      state TEXT NOT NULL,
+      previous_state TEXT,
+      actor TEXT NOT NULL,
+      detail TEXT,
+      occurred_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS sync_log (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id),
@@ -210,9 +244,17 @@ export function createSchema(db: BetterSqlite3.Database): void {
     CREATE INDEX IF NOT EXISTS idx_adoption_user ON adoption_events(user_id, competency_id);
     CREATE INDEX IF NOT EXISTS idx_results_user ON competency_results(user_id, competency_id);
     CREATE INDEX IF NOT EXISTS idx_practice_task ON practice_sessions(task_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_workflow_events_unique
+      ON workflow_events(user_id, competency_id, attempt_number, state, task_id);
+
+    -- Legacy cleanup: sync_log was designed for sync bookkeeping but never
+    -- written or read by any code path (client idempotency lives in
+    -- evidence_submissions.client_token). Dropped per-boot.
+    DROP TABLE IF EXISTS sync_log;
   `);
 
   migrateMentorFeedbackDraftedBy(db);
+  migrateEvidenceVoiceFile(db);
 }
 
 /**
@@ -244,5 +286,13 @@ function migrateMentorFeedbackDraftedBy(db: BetterSqlite3.Database): void {
     DROP TABLE mentor_feedback_old;
     CREATE INDEX IF NOT EXISTS idx_feedback_evidence ON mentor_feedback(evidence_id);
   `);
+}
+
+/** Adds the voice_file column to evidence_submissions for DBs created before voice evidence (GOAL 16). */
+function migrateEvidenceVoiceFile(db: BetterSqlite3.Database): void {
+  const cols = db.prepare(`PRAGMA table_info(evidence_submissions)`).all() as Array<{ name: string }>;
+  if (!cols.some((c) => c.name === "voice_file")) {
+    db.exec(`ALTER TABLE evidence_submissions ADD COLUMN voice_file TEXT;`);
+  }
 }
 

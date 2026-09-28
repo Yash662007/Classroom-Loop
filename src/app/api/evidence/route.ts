@@ -19,6 +19,7 @@ export async function POST(req: Request) {
     let voiceNote: string | null = null;
     let checklist: Record<string, boolean>;
     let photoPath: string | null = null;
+    let voiceFilePath: string | null = null;
     let clientToken: string | null = req.headers.get("x-idempotency-key");
 
     const contentType = req.headers.get("content-type") ?? "";
@@ -47,6 +48,19 @@ export async function POST(req: Request) {
         const { saveUpload } = await import("@/lib/uploads");
         photoPath = await saveUpload(auth.id, photo);
       }
+
+      const voiceFile = form.get("voice_file");
+      if (voiceFile && voiceFile instanceof File && voiceFile.size > 0) {
+        if (voiceFile.size > 5 * 1024 * 1024) {
+          throw new ApiError(413, "Voice note must be 5 MB or smaller", "voice_too_large");
+        }
+        const voiceAllowed = ["audio/webm", "audio/mp4", "audio/ogg", "audio/mpeg"];
+        if (!voiceAllowed.includes(voiceFile.type)) {
+          throw new ApiError(415, "Voice note must be WebM, MP4, OGG or MP3 audio", "voice_type");
+        }
+        const { saveUpload } = await import("@/lib/uploads");
+        voiceFilePath = await saveUpload(auth.id, voiceFile);
+      }
     } else {
       const body = evidenceSchema.parse(await req.json().catch(() => {
         throw new ApiError(400, "Request body must be valid JSON or multipart form data", "bad_json");
@@ -69,6 +83,7 @@ export async function POST(req: Request) {
       voiceNote,
       checklist,
       photoPath,
+      voiceFilePath,
       clientToken,
     });
     return NextResponse.json(result, { status: result.duplicate ? 200 : 201 });
